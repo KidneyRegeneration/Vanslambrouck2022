@@ -1,0 +1,532 @@
+---
+title: "D13_and_D13p14_Intgrtd_analysis"
+author: "Jess Vanslambrouck"
+output: html_document
+---
+
+```{r setup, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+library(Seurat)
+library(tidyverse)
+
+## Global options
+options(max.print="500")
+opts_chunk$set(echo=TRUE,
+	             cache=TRUE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               cache.lazy = FALSE)
+opts_knit$set(width=500)
+devtools::load_all("../../../Sean/PhD/R-projects/SeansKit/")
+
+```
+
+
+
+# Notes
+
+Continuing DD156 analysis. Sean has previously added the HTO information to the seurat objects containing D13 and D13p14 sequencing data (4 relicates per condition, individually hashed, 8 hash tags)
+
+## Reading in objects 
+
+Details of the .rds file
+
+```{r}
+read_rds("/group/kidn1/Group-Little_MCRI/People/JessV/Profiling/DD156_1502cln2_ExtDiff_CDBLY2_scRNASeq/ExtDiff_Hashing.rds")
+
+```
+
+Assigning to Seurat (object?)
+
+```{r}
+Seurat <- read_rds("/group/kidn1/Group-Little_MCRI/People/JessV/Profiling/DD156_1502cln2_ExtDiff_CDBLY2_scRNASeq/ExtDiff_Hashing.rds")
+
+```
+
+Look at how this seurat object is structured (note that the assay is 'RNA'):
+
+```{r}
+str(Seurat)
+
+```
+
+Chunk below shows meta data columns. Explanations of some of these from Sean:
+
+**nCount_HTO and nFeature_HTO** are the same as their "RNA" counterparts  
+**HTO_maxID** is the barcode that has the most hits within the cell  
+**HTO_secondID** is the barcode that has the second most hits, if there is one otherwise it will be called unmapped  
+**HTO_classification** is the full classification of the cell, if it is a doublet it will have 2 names here  
+**HTO_classification.global** identifier of Singlet, Doublet or Negative  
+**hash.ID** ID given to each cell, either the most likely single call, Doublet or Negative
+
+```{r}
+colnames(Seurat$d13@meta.data)
+colnames(Seurat$d13p14@meta.data)
+```
+Added a new column to the metadata for both objects to give the name of the samples (will be integrating these for downstream analysis)
+
+```{r}
+
+Seurat$d13$age <- "D13"
+Seurat$d13p14$age <- "D13p14"
+
+```
+
+
+# Quality Control
+
+Filtering of RNA based on mitochondrial genes, nfeature_RNA and nCount_RNA was done prior to integration of cell barcodes (see HTO_for_Seurat.Rmd). 
+
+However, still need to normalise & scale data to be able to compare between cells. Can do using SCTransform (introduced in Seurat v3 that Sean explained as a "stand alone function that can perform the **Normalisation**, **Scaling** and identification of **Variable Features** in the dataset - can also simultaneously regress out unwanted sources of variation").
+
+First use the CellCycleScoring function to generate a "Phase" score for each cell to identify the cell cycle stage (can all this using seurat$Phase). Seurat creates a 'corrected' expression matrix by regressing out cell cycle via modeling the relationship between gene expression & cell cycle phase scores. This corrected matrix can be used downstream for dimensional reduction. 
+
+Can only regress out S genes and G2M genes. The cc.genes list contains two vectors relating to G2M and S phase associated genes which come with the Seurat package (there isn’t a G1 gene vector associated with it). 
+
+Regression will double the size of the seurat object (in this analysis, the object was originally 3.5GB). 
+
+
+```{r}
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+
+Seurat$d13 <- NormalizeData(Seurat$d13)
+Seurat$d13p14 <- NormalizeData(Seurat$d13p14)
+
+Seurat$d13 <- CellCycleScoring(Seurat$d13, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+Seurat$d13p14 <- CellCycleScoring(Seurat$d13p14, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+
+Seurat$d13 <- SCTransform(Seurat$d13, vars.to.regress = c("G2M.Score", "S.Score"), verbose = FALSE)
+Seurat$d13p14 <- SCTransform(Seurat$d13p14, vars.to.regress = c("G2M.Score", "S.Score"), verbose = FALSE)
+```
+
+# Dimensional Reduction
+
+Use dimensional reduction algorithms such as PCA, tSNE and UMAP to visualise and cluster the data
+
+```{r}
+Seurat$d13 <- RunPCA(Seurat$d13, verbose = F)
+Seurat$d13p14 <- RunPCA(Seurat$d13p14, verbose = F)
+#seurat <- RunUMAP(seurat, dims = 1:30, verbose = F)
+
+DimPlot(Seurat$d13, reduction = "pca", dims = c(1,2)) # can change the dimensions in the brackets to view different PCs
+DimPlot(Seurat$d13p14, reduction = "pca", dims = c(1,2))
+```
+
+
+
+
+The aim is to have these quite overlapped. D13p14 sample is clearly not overlapped. Check UMAP:
+
+
+Now can make a UMAP (identifying dimensionality, use a dimentional reduction plot. This is not clustering, It computes up to 30 dimensions and shows in a 2D plot)
+
+```{r}
+Seurat$d13  <- RunUMAP(Seurat$d13, dims = 1:30, seed.use = 250395, n.components = 3)
+Seurat$d13p14  <- RunUMAP(Seurat$d13p14, dims = 1:30, seed.use = 250395, n.components = 3)
+
+DimPlot(Seurat$d13, reduction = "umap", group.by = "Phase", dims = c(1,2))
+DimPlot(Seurat$d13p14, reduction = "umap", group.by = "Phase", dims = c(1,2))
+
+DimPlot(Seurat$d13, reduction = "umap", group.by = "Phase", dims = c(2,3))
+DimPlot(Seurat$d13p14, reduction = "umap", group.by = "Phase", dims = c(2,3))
+```
+Sean suggested modifying above UMAP code - to n.components = 2 (instead of 3) and removing 'dims=' because it means when you plot in the DimPlot functions (which is 2D), you don't get a proper representation of the data. Adjusting as suggested should give the best possible representation in 2D.
+
+
+```{r}
+Seurat$d13  <- RunUMAP(Seurat$d13, dims = 1:30, seed.use = 250395, n.components = 2)
+Seurat$d13p14  <- RunUMAP(Seurat$d13p14, dims = 1:30, seed.use = 250395, n.components = 2)
+
+DimPlot(Seurat$d13, reduction = "umap", group.by = "Phase")
+DimPlot(Seurat$d13p14, reduction = "umap", group.by = "Phase")
+
+```
+
+Above plots indicate a partial seperation of G2M and S phase cells in both plots - some isoated clusters of just G2M or S, but these cells are also overlapping with G1 in other clusters. One possibility is that in these cell populations the overriding feature is cell cycle so regressing out may not have much of an effect. 
+
+
+# Clustering of cells
+
+Seurat has in built methods to cluster the cells. These are done using a graph-based approach & here are the functions you run to cluster data. Will perform a number of clustering steps at different resolutions. The output will be stored as a new column in the meta.data.
+
+```{r}
+Seurat$d13 <- FindNeighbors(Seurat$d13, dims = 1:30, verbose = F)
+Seurat$d13p14 <- FindNeighbors(Seurat$d13p14, dims = 1:30, verbose = F)
+
+Seurat$d13 <- FindClusters(Seurat$d13, resolution = seq(from = 0, to = 2, by = 0.1), verbose = F)
+Seurat$d13p14 <- FindClusters(Seurat$d13p14, resolution = seq(from = 0, to = 2, by = 0.1), verbose = F)
+
+
+# seq() generates a sequence of numbers, so we can generate clustering at different resolutions. Higher numbers split into more cluster.
+```
+
+To look at the outputs of above clustering, now stored as new column in the meta.data (note the number indicates what cluster each cell has been assigned to at each resolution. The largest cluster is called 0 and the rest are labelled in decreasing size.
+
+```{r}
+head(Seurat$d13@meta.data, 20)[, 13:34]
+head(Seurat$d13p14@meta.data, 20)[, 13:34]
+```
+
+Above output & relationship can be visualised using the `clustree` package (developer - Luke Zappia, PhD).
+
+```{r}
+# install.packages("ggraph")
+# install.packages("clustree")
+library(ggraph)
+clustree::clustree(Seurat$d13, suffix = "SCT_snn_res.")
+clustree::clustree(Seurat$d13p14, suffix = "SCT_snn_res.")
+```
+
+Going to look at a resolution of 0.7 for d13 & 0.7 for d13p14 to see how this transplates visually on the dataset.
+
+```{r}
+DimPlot(Seurat$d13, reduction = "umap", group.by = "SCT_snn_res.0.7", label = T)
+DimPlot(Seurat$d13p14, reduction = "umap", group.by = "SCT_snn_res.0.5", label = T)
+#change "SCT_snn_res.0.5" to column that is defining hashing ID
+```
+
+```{r}
+# Export plot above:
+
+png(filename = "output/D13_AllClusters_UMAP_2.png", width = 150, height = 100, units = "mm", res = 1200)
+DimPlot(Seurat$d13, reduction = "umap", group.by = "SCT_snn_res.0.7", label = T)
+dev.off()
+
+png(filename = "output/D13p14_AllClusters_UMAP_2.png", width = 150, height = 100, units = "mm", res = 1200)
+DimPlot(Seurat$d13p14, reduction = "umap", group.by = "SCT_snn_res.0.5", label = T)
+dev.off()
+```
+
+Want to look at contribution of cells from each individual replicate to the various clusters and check there is a good level of contribution
+
+
+```{r}
+options(max.print=999999) # rows were ommited in table below - R has a limit, used this code to increase limit.
+```
+
+
+```{r}
+table(Seurat$d13$hash.ID, Seurat$d13$SCT_snn_res.0.7)
+table(Seurat$d13p14$hash.ID, Seurat$d13p14$SCT_snn_res.0.5)
+```
+
+Looking to make sure there is a fairly even distribution of cells from each replicate across the clusters - not an over-representation of individual samples.
+
+
+# Set chosen clustering resolution
+
+After happy with clustering resolution (this experiment = d13 at 0.7, d13p14 at 0.5), this can be applied to the objects 
+
+```{r}
+Seurat$d13 <- SetIdent(Seurat$d13, value = "SCT_snn_res.0.7")
+Seurat$d13p14 <- SetIdent(Seurat$d13p14, value = "SCT_snn_res.0.5")
+
+DimPlot(Seurat$d13, label = T)
+DimPlot(Seurat$d13p14, label = T)
+
+# export images
+png(filename = "output/d13_UMAP_1.png", width = 300, height = 200, units = "mm", res = 300)
+DimPlot(Seurat$d13, label = T)
+dev.off()
+
+png(filename = "output/d13p14_UMAP_1.png", width = 300, height = 200, units = "mm", res = 300)
+DimPlot(Seurat$d13p14, label = T)
+dev.off()
+
+```
+
+Resolution can also be written into a new meta.data slot for easy reference - below makes a new metadata column names 'Cluster' (but doesn't set "active.ident" default slot which is where later marker analysis using FindAllMarkers function will retrieve cluster information from as a default, so will need to set the active identities column to "Cluster" so that seurat will analyse the correct column)
+
+- set new metadata column:
+
+```{r}
+Seurat$d13$Cluster <- Seurat$d13$SCT_snn_res.0.7
+Seurat$d13p14$Cluster <- Seurat$d13p14$SCT_snn_res.0.5
+```
+
+- assign this column as the active identity column for subsequent cluster/marker analysis:
+
+```{r}
+Idents(Seurat$d13) <- "Cluster"
+Idents(Seurat$d13p14) <- "Cluster"
+```
+
+
+# Marker analysis
+
+Next step is to identify the clusters by identifying the genes differentially expressed in each cluster. 
+
+Note from Sean about 'assays': When you first read in the raw data it is put into the "RNA" assay. When we run the SCTransform operations, the variable genes that are operated on are put into the "SCT" assay. If you merge multiple datasets, the genes and transformation performed on them are placed into the "integrated" assay. If you have HTO (hashing) data, this will be placed into an "HTO" assay as well. These allow for different containers that will hold the types of data and you can interact with these seperately as required.  
+
+For identifying differential gene expression (DE), we are advised to use the "RNA" assay for best and most accurate results.
+
+First set default assay to RNA for both objects:
+
+```{r}
+DefaultAssay(Seurat$d13) <- "RNA"
+DefaultAssay(Seurat$d13p14) <- "RNA"
+```
+
+Next identify markers within clusters using the `FindAllMarkers` function (compares one cluster to all other clusters and finds genes that fit the DE metrics included in the function call). The output from this will be in table form & can modify and filter this table to identify specific genes, identify the most DE genes per cluster etc.
+
+In the code below, test used is 't', there are multiple tests available to use. The default test is a wilcoxon test. However, there was a paper that reviewed this and found the student's T-test (referred to as "t" in this function) was the most accurate and best to use in standard analysis.
+
+```{r}
+markers.d13 <- FindAllMarkers(object = Seurat$d13, # select our object
+                          logfc.threshold = 0.25, # the threshold above which genes must be DE to be called markers. 
+                          min.pct = 0.1, # minimum % of cells in the cluster a marker must be expressed in. 
+                          only.pos = T, # set to TRUE - only returns genes that are increased to simplify output
+                          return.thresh = 0.05, # will only return results with a p < specified value
+                          test.use = "t") 
+
+markers.d13p14 <- FindAllMarkers(object = Seurat$d13p14, # select our object
+                          logfc.threshold = 0.25, # the threshold above which genes must be DE to be called markers. 
+                          min.pct = 0.1, # minimum % of cells in the cluster a marker must be expressed in. 
+                          only.pos = T, # set to TRUE - only returns genes that are increased to simplify output
+                          return.thresh = 0.05, # will only return results with a p < specified value
+                          test.use = "t")
+
+```
+
+Export this table as a .csv file to be opened up in excel (Sean suggests to set this up as a .xlsx file where each cluster is a different sheet, as it is easier to analyse in TopFunn). Following code will modify and export these files (note that the exported .csv file can be read back in, FindAllMarker function does not have to be run again unless altering the parameters)
+
+- Exported d13: 
+
+```{r}
+
+write_csv(markers.d13, path = "output/Cluster_markers_D13.csv") # export the markers file as a csv
+
+export.markers.d13 <- lapply(0:(length(unique(Seurat$d13@active.ident))-1), # export markers as an excel table divided by cluster
+                         function(x) {
+    markers.d13 %>% # generate a list where each component is a filtered table of each cluster's markers
+        dplyr::filter(cluster == x, p_val_adj < 0.05, avg_logFC > 0) %>%
+        dplyr::arrange(-avg_logFC) %>%
+        select(Gene = gene, LogFC = avg_logFC, pVal = p_val_adj)
+})
+# export the table to excel file
+WriteXLS::WriteXLS(export.markers.d13,
+                   ExcelFileName = "output/Cluster_markers_D13.csv",
+                   SheetNames = paste0("Cluster ",
+                                    0:(length(unique(Seurat$d13@active.ident))-1)))
+```
+
+- Exported d13p14:
+
+```{r}
+write_csv(markers.d13p14, path = "output/Cluster_markers_D13p14.csv") # export the markers file as a csv
+
+export.markers.d13p14 <- lapply(0:(length(unique(Seurat$d13p14@active.ident))-1), # export markers as an excel table divided by cluster
+                         function(x) {
+    markers.d13p14 %>% #generate a list where each component is a filtered table of each cluster's markers
+        dplyr::filter(cluster == x, p_val_adj < 0.05, avg_logFC > 0) %>% 
+        dplyr::arrange(-avg_logFC) %>%
+        select(Gene = gene, LogFC = avg_logFC, pVal = p_val_adj)
+})
+# export the table to excel file
+WriteXLS::WriteXLS(export.markers.d13p14,
+                   ExcelFileName = "output/Cluster_markers_D13p14.csv",
+                   SheetNames = paste0("Cluster ",
+                                    0:(length(unique(Seurat$d13p14@active.ident))-1)))
+```
+
+
+# Visualising gene expression
+
+Some genes wwre not DE as expected in above exported excel DE lists. Visualising expression here using feature plots and also dot plots
+
+##D13 samples
+
+```{r}
+StrDotPlot(Seurat$d13, features = rev(c("MIXL1", "TBXT", "TCF15", "UNCX", "FOXF1", "HAND2", "HOXA11", "HOXC11", "HOXD11", "EYA1", "OSR1", "PAX2", "SIX1", "SIX2", "CITED1", "DAPL1", "LYPD1")), group.by = "Cluster", dot.min = 0.05, dot.scale = 10)
+```
+```{r}
+png(filename = "output/D13_ClusterMarkers_DotPlot1.png", width = 240, height = 160, units = "mm", res = 1200)
+StrDotPlot(Seurat$d13, features = rev(c("MIXL1", "TBXT", "TCF15", "UNCX", "FOXF1", "HAND2", "HOXA11", "HOXC11", "HOXD11", "EYA1", "OSR1", "PAX2", "SIX1", "SIX2", "CITED1", "DAPL1", "LYPD1")), group.by = "Cluster", dot.min = 0.05, dot.scale = 10)
+dev.off()
+```
+
+
+## d13p14 samples
+
+### General markers
+
+
+```{r}
+StrDotPlot(Seurat$d13p14, features = rev(c("RAB5A")), group.by = "Cluster", dot.min = 0.05, dot.scale = 10)
+```
+
+```{r}
+StrDotPlot(Seurat$d13p14, features = rev(c("GATA3", "CDH1", "SLC12A3", "SLC12A1", "POU3F3", "HNF4A", "SLC3A1", "LRP2", "MAFB", "NPHS1", "SIX1", "SIX2", "LYPD1", "CITED1", "MEIS1", "POSTN", "PECAM1", "SOX17")), group.by = "Cluster", dot.min = 0.05, dot.scale = 10)
+```
+```{r}
+png(filename = "output/D13p14_ClusterMarkers_DotPlot2.png", width = 220, height = 150, units = "mm", res = 1200)
+StrDotPlot(Seurat$d13p14, features = rev(c("GATA3", "CDH1", "SLC12A3", "SLC12A1", "POU3F3", "HNF4A", "SLC3A1", "LRP2", "MAFB", "NPHS1", "SIX1", "SIX2", "LYPD1", "CITED1", "MEIS1", "POSTN", "PECAM1", "SOX17")), group.by = "Cluster", dot.min = 0.05, dot.scale = 10)
+dev.off()
+```
+
+```{r}
+# cartilage
+StrDotPlot(Seurat$d13p14, features = c("SOX5", "SOX6", "SOX9", "COL2A1", "CD44", "ITM2A"), group.by = "Cluster")
+```
+
+
+### COVID-19 project
+
+```{r}
+# DotPlot(Seurat$d13p14, features = c("ACE2", "CTSL", "CTSB", "TMPRSS2", "CD209L", "CD209", "BSG", "ANPEP", "DPP4", "HSPG2", "NRP1", "ADAM17", "FURIN", "SLC6A19", "SLC3A1", "SOX17", "SLC12A1", "SLC12A3", "GATA3", "MAFB", "MEIS1"), group.by = "Cluster")
+
+StrDotPlot(Seurat$d13p14, features = c("SLC6A19", "HSPG2", "FURIN", "CTSL", "CTSB", "TMPRSS2", "ADAM17", "NRP1", "DPP4", "CD209", "BSG", "ANPEP", "ACE2", "SLC3A1", "SOX17", "SLC12A1", "SLC12A3", "GATA3", "MAFB", "MEIS1"), group.by = "Cluster", dot.min = 0.05)
+
+StrDotPlot(Seurat$d13p14, features = c("HSPG2", "FURIN", "CTSL", "CTSB", "TMPRSS2", "ADAM17", "NRP1", "DPP4", "CD209", "BSG", "ANPEP", "ACE2"), group.by = "Cluster", dot.min = 0.05, dot.scale = 10)
+
+
+```
+
+
+
+```{r}
+# export above plot as png file:
+
+png(filename = "output/EntryFactors_ExtDiff_DotPlot_1.png", width = 300, height = 200, units = "mm", res = 300)
+StrDotPlot(Seurat$d13p14, features = c("HSPG2", "FURIN", "CTSL", "CTSB", "TMPRSS2", "ADAM17", "NRP1", "DPP4", "CD209", "BSG", "ANPEP", "ACE2"), group.by = "Cluster", dot.min = 0.05, dot.scale = 10)
+dev.off()
+```
+
+
+```{r}
+png(filename = "output/EntryFactors_ExtDiff_DotPlot.png", width = 720, height = 240, units = "mm", res = 300)
+DotPlot(Seurat$d13p14, features = c("ACE2", "CTSL", "CTSB", "TMPRSS2", "CD209L", "CD209", "BSG", "ANPEP", "DPP4", "HSPG2"), group.by = "Cluster")
+dev.off()
+```
+
+#### ACE2 expression in PEC population
+
+
+```{r}
+
+StrDotPlot(Seurat$d13p14, features = rev(c("ACE2", "EPCAM", "CLDN1", "CAV2", "PAX8", "KRT19", "CDKL1", "AKAP12", "PROM1")), group.by = "Cluster", dot.min = 0.05, dot.scale = 10)
+FeaturePlot(Seurat$d13p14,features = c("ACE2", "EPCAM", "CLDN1", "CAV2", "PAX8", "KRT19", "CDKL1", "AKAP12", "PROM1", "SLC34A1", "SLC36A2", "GLYAT1", "HNF4A"), order = T, cols = c("light grey", "red"))
+```
+
+```{r}
+# export above plots
+
+png(filename = "output/ACE2_PECpopulations_DotPlot_NEW.png", width = 200, height = 180, units = "mm", res = 600)
+StrDotPlot(Seurat$d13p14, features = rev(c("ACE2", "EPCAM", "CLDN1", "CAV2", "PAX8", "KRT19", "CDKL1", "AKAP12", "PROM1")), group.by = "Cluster", dot.min = 0.05, dot.scale = 10)
+dev.off()
+
+png(filename = "output/ACE2_PECpopulations_S1segmentPT_FeaturePlot.png", width = 500, height = 300, units = "mm", res = 300)
+FeaturePlot(Seurat$d13p14,features = c("ACE2", "EPCAM", "CLDN1", "CAV2", "PAX8", "KRT19", "CDKL1", "AKAP12", "PROM1", "SLC34A1", "SLC36A2", "GLYAT1", "HNF4A"), order = T, cols = c("light grey", "red"))
+dev.off()
+```
+
+### Determining PT segments (S1-S2-S3)
+
+
+#### Isolating PT clusters
+
+```{r}
+PT.clusters <- Seurat$d13p14[, Seurat$d13p14$Cluster %in% c(1,3,8,13,15)]
+DotPlot(PT.clusters, features = c("SLC3A1", "HNF4A"), group.by = "Cluster")
+
+```
+
+#### Re-clustering PT cluster in d13p14
+
+```{r}
+PT.clusters <- SCTransform(PT.clusters, vars.to.regress = c("G2M.Score", "S.Score"), verbose = FALSE)
+```
+
+```{r}
+PT.clusters <- RunPCA(PT.clusters, verbose = F)
+#seurat <- RunUMAP(seurat, dims = 1:30, verbose = F)
+
+DimPlot(PT.clusters, reduction = "pca", dims = c(1,2)) # can change the dimensions in the brackets to view different PCs
+
+```
+
+```{r}
+PT.clusters  <- RunUMAP(PT.clusters, dims = 1:30, seed.use = 250395, n.components = 2)
+
+DimPlot(PT.clusters, reduction = "umap", group.by = "Phase")
+
+```
+
+```{r}
+PT.clusters <- FindNeighbors(PT.clusters, dims = 1:30, verbose = F)
+PT.clusters <- FindClusters(PT.clusters, resolution = seq(from = 0, to = 2, by = 0.1), verbose = F)
+```
+
+```{r}
+DimPlot(PT.clusters, reduction = "umap", group.by = "SCT_snn_res.0.2")
+DimPlot(PT.clusters, reduction = "umap", group.by = "SCT_snn_res.0.1")
+```
+
+```{r}
+# Export plot above:
+
+png(filename = "output/PTclusters_reclustered_UMAP_1.png", width = 150, height = 100, units = "mm", res = 600)
+DimPlot(PT.clusters, reduction = "umap", group.by = "SCT_snn_res.0.1")
+dev.off()
+
+png(filename = "output/PTclusters_reclustered_UMAP_2.png", width = 150, height = 100, units = "mm", res = 600)
+DimPlot(PT.clusters, reduction = "umap", group.by = "SCT_snn_res.0.2")
+dev.off()
+
+```
+
+
+```{r}
+
+FeaturePlot(PT.clusters,features = c("SLC34A1","AKAP12","SLC47A1", "SLC2A2","SLC2A1", "SLC7A9", "SLC5A2", "SLC5A1", "GPX3"), order = T, cols = c("light grey", "red"))
+
+```
+```{r}
+# export above plot
+
+png(filename = "output/S1-S2_S3__Markers_Featurplots_1.png", width = 250, height = 200, units = "mm", res = 600)
+FeaturePlot(PT.clusters,features = c("SLC34A1","AKAP12","SLC2A2","SLC2A1", "SLC5A2", "SLC5A1"), order = T, cols = c("light grey", "red"))
+dev.off()
+
+png(filename = "output/S1-S2_S3__Markers_Featurplots_2.png", width = 300, height = 200, units = "mm", res = 600)
+FeaturePlot(PT.clusters,features = c("SLC34A1","AKAP12","AGT", "SLC2A2","SLC2A1", "CUBN", "SLC5A2", "SLC5A1", "SLC7A9"), order = T, cols = c("light grey", "red"))
+dev.off()
+
+png(filename = "output/S1-S2_S3__Markers_Featurplots_3.png", width = 300, height = 200, units = "mm", res = 600)
+FeaturePlot(PT.clusters,features = c("SLC34A1","AKAP12","SLC47A1", "SLC2A2","SLC2A1", "SLC7A9", "SLC5A2", "SLC5A1", "AGT"), order = T, cols = c("light grey", "red"))
+dev.off()
+
+png(filename = "output/S1-S2_S3__Markers_Featurplots_4.png", width = 300, height = 200, units = "mm", res = 600)
+FeaturePlot(PT.clusters,features = c("SLC34A1","AKAP12","SLC47A1", "SLC2A2","SLC2A1", "SLC7A9", "SLC5A2", "SLC5A1", "GPX3"), order = T, cols = c("light grey", "red"))
+dev.off()
+
+```
+
+
+
+
+
+# Exporting the Seurat object
+
+```{r}
+write_rds(Seurat, "ExtDiff_Hashing.rds")
+```
+
+When re-load can re name as Seurat:
+
+```{r}
+Seurat <- ExtDiff_Hashing
+```
+
+Deleting from workspace:
+
+```{r}
+rm(ExtDiff_Hashing)
+```
+
+

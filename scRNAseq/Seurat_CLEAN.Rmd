@@ -1,0 +1,623 @@
+---
+title: "Seurat"
+author: "Sean Wilson & Jess Vanslambrouck"
+date: "5/23/2019"
+output: html_document
+toc: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup}
+#install.packages("Seurat")
+#install.packages("tidyverse")
+# install.packages("hdf5")
+library(Seurat)
+library(tidyverse)
+library(ggraph)
+devtools::load_all("../../Sean/PhD/R-projects/SeansKit/")
+# library(hdf5r)
+```
+
+All the information needed, and the tutorials this document is based on, can be found at https://satijalab.org/seurat/
+
+
+### Loading 10x data
+
+
+```{r}
+
+data<-Read10X(data.dir = "/group/kidn1/RNAseq/scRNA_Jessica/jess_run/SIX2cre_extdiff_CDBLY/outs/filtered_feature_bc_matrix")
+
+data.4 <- Read10X(data.dir = "/group/kidn1/Group-Little_MCRI/Data/SingleCellRNASeq/ReporterOrganoid/SIX2_Cre_reporter/outs/filtered_gene_bc_matrices/GRCh38_reporters/")
+
+seurat.4 <- CreateSeuratObject(counts = data.4, project = "D18_SIX2Cre_standard_E6")
+seurat.1 <- CreateSeuratObject(counts = data, project = "SIX2Cre_extdiff")
+
+```
+
+
+```{r}
+
+seurat.4$age <- 18
+seurat.4$line <- "SIX2Cre"
+seurat.4$condition <- "E6"
+seurat.4$sample <- "D18_SIX2Cre_standard_E6"
+
+seurat.1$age <- 25
+seurat.1$line <- "SIX2Cre"
+seurat.1$condition <- "Extdiff"
+seurat.1$sample <- "SIX2Cre_extdiff"
+
+
+seurat.list <- list(seurat.1, seurat.4)
+```
+
+
+### Quality Control
+
+
+```{r}
+for (i in 1:length(seurat.list)) {
+  seurat.list[[i]][["percent.mt"]] <- PercentageFeatureSet(seurat.list[[i]], pattern = "^MT-")
+  percent.ribo <- c(grep("^RPL", rownames(seurat.list[[i]]), value = T),
+                    grep("^RPS", rownames(seurat.list[[i]]), value = T)) # all ribosome genes
+  seurat.list[[i]][["percent.ribo"]] <- PercentageFeatureSet(seurat.list[[i]], features = percent.ribo)
+  percent.mitoribo <- c(grep("^MRPL", rownames(seurat.list[[i]]), value = T), 
+                        grep("^MRPS", rownames(seurat.list[[i]]), value = T)) # all mitochonria ribosome genes
+  seurat.list[[i]][["percent.mito-ribo"]] <- PercentageFeatureSet(seurat.list[[i]], features = percent.mitoribo)
+}
+
+# Visualize QC metrics as a violin plot
+VlnPlot(seurat.list[[1]], features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.ribo", "percent.mito-ribo"), ncol = 5)
+VlnPlot(seurat.list[[2]], features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.ribo", "percent.mito-ribo"), ncol = 5)
+
+```
+
+### Merge datasets
+
+```{r}
+options(future.globals.maxSize = 4000 * 1024^2) # increase maximum object size in Rstudio
+
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+for (i in 1:length(seurat.list)) {
+    #seurat.list[[i]] <- CellCycleScoring(seurat.list[[i]], s.features = s.genes, g2m.features = g2m.genes, set.ident = F) # cell cycle scoring function in Seurat package
+    seurat.list[[i]] <- SCTransform(seurat.list[[i]], verbose = F)
+}
+# preparing and performing integration
+features <- SelectIntegrationFeatures(seurat.list) # selecting variable genes for dataset integration
+seurat.list <- PrepSCTIntegration(seurat.list, anchor.features = features, verbose = F)
+anchors <- FindIntegrationAnchors(seurat.list, normalization.method = "SCT", anchor.features = features, verbose = F)
+seurat <- IntegrateData(anchorset = anchors, normalization.method = "SCT", verbose = T) # generation of integrated dataset (merged to eliminate batch effects)
+
+DefaultAssay(seurat) <- "integrated" # set the default assay to the integrated datasets
+```
+
+We have now generated an object that contains all the raw information from each dataset as well as the integrated expression matrix of all samples seurat. These are stored in seperate "assays" which can be accessed as needed.
+
+### Dimensional Reduction
+
+
+```{r}
+seurat <- RunPCA(seurat, verbose = F) # compute the principal component analysis, require for tsne and umap plotting
+DimPlot(seurat, reduction = "pca", dims = c(1,2), group.by = "sample")
+
+```
+
+```{r}
+seurat <- RunUMAP(seurat, dims = 1:30, n.components = 3)
+DimPlot(seurat, reduction = "umap", dims = c(1,2), split.by = "sample") # can change the dimensions in the brackets to view different PCs
+```
+
+### Clustering Cells
+
+```{r}
+seurat <- FindNeighbors(seurat, dims = 1:30, verbose = F)
+seurat <- FindClusters(seurat, resolution = seq(from = 0, to = 2, by = 0.1), verbose = T)
+
+# seq() generates a sequence of numbers, so we can generate clustering at different resolutions
+write_rds(seurat, "SIX2Cre-extended_SIX2Cre-standard.rds")
+#seurat <- read_rds("all_organoids.rds")
+```
+
+
+### Deciding cluster resolution
+
+
+```{r}
+DefaultAssay(seurat) <- "RNA"
+seurat <- NormalizeData(seurat, verbose = F)
+```
+
+clustree package.
+
+
+```{r}
+#install.packages("clustree") might need to be done via putty (remotes::install_github("lazappi/clustree", dependencies = T))
+install.packages("clustree")
+library(ggraph)
+# to call a specific function from a package that you have not loaded, use package::function()
+# this is less important using the cluster, as it is more of a memory saving tool
+clustree::clustree(seurat, prefix = "integrated_snn_res.")
+
+
+```
+
+
+```{r}
+DimPlot(seurat, reduction = "umap", group.by = "integrated_snn_res.0.8", label = T)
+DimPlot(seurat, reduction = "umap", group.by = "integrated_snn_res.0.8", split.by = "sample", label = T)
+```
+
+```{r}
+#export the above plot
+
+png(filename = "output/UMAP_SIX2Cre_Ext_vs_Std_2.png", width = 275, height = 150, units = "mm", res = 1200)
+DimPlot(seurat, reduction = "umap", group.by = "integrated_snn_res.0.8", split.by = "sample", label = T)
+dev.off()
+
+png(filename = "output/UMAP_SIX2Cre_Ext_vs_Std_3.png", width = 180, height = 100, units = "mm", res = 1200)
+DimPlot(seurat, reduction = "umap", group.by = "integrated_snn_res.0.8", split.by = "sample", label = T)
+dev.off()
+
+
+```
+
+make a new metadata column with chosen resolution.
+
+```{r}
+seurat$Cluster_ident <- seurat$integrated_snn_res.0.8
+seurat <- SetIdent(seurat, value = "Cluster_ident")
+```
+
+
+## Marker analysis
+
+
+```{r}
+markers <- FindAllMarkers(object = seurat, # select our object
+                          logfc.threshold = 0.25, # the threshold above which genes must be DE to be called markers. 
+                          min.pct = 0.1, # minimum % of cells in the cluster a marker must be expressed in. A gene like WNT9B which is expressed highly but in a small number of cells in a population could potentially be missed with this variable. 10% of a population is reasonable for most genes though.
+                          only.pos = T, # set to TRUE will only return genes that are increased, not decreased. Simplifies outcome, can look at decreased genes specifically if needed.
+                          return.thresh = 0.05, # will only return results with a p < specified value
+                          )
+```
+
+Export this as a .csv file to be opened up in excel.
+
+
+```{r}
+# export the markers file as a csv
+write_csv(markers, path = "output/markers.csv")
+
+# export markers as an excel table divided by cluster
+# generate a list where each component is a filtered table of each cluster's markers
+export.markers <- lapply(0:(length(unique(seurat@active.ident))-1),
+                         function(x) {
+    markers %>%
+        dplyr::filter(cluster == x, p_val_adj < 0.05, avg_logFC > 0) %>%
+        dplyr::arrange(-avg_logFC) %>%
+        select(Gene = gene, LogFC = avg_logFC, pVal = p_val_adj)
+})
+# export the table to excel file
+WriteXLS::WriteXLS(export.markers,
+                   ExcelFileName = "output/cluster_markers.xls",
+                   SheetNames = paste0("Cluster ",
+                                    0:(length(unique(seurat@active.ident))-1)))
+```
+
+
+### Dotplot
+
+Renaming sample ID for dotplot
+
+```{r}
+seurat$sample <- gsub(pattern = "_",
+                      replacement = ".",
+                      x = seurat$sample)
+```
+
+
+We can also look at the expression in a DotPlot, which shows the same information in a different format
+
+```{r}
+DotPlot(seurat, features = unique(top5$gene), split.by = "sample", assay = "RNA", cols = c("blue", "red")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(legend.title=element_text(size=rel(0.5))) + 
+  theme(panel.grid.major = element_line(colour = "lightgray"))
+
+```
+
+## Isolating specific clusters in merged datasets to compare genes
+
+### Isolation of DT cluster
+
+
+```{r}
+TAL_DT.clusters <- seurat[, seurat$Cluster_ident %in% c(11,13)]
+DotPlot(TAL_DT.clusters, features = c("SLC12A1", "SLC12A3", "GATA3"), group.by = "Cluster_ident")
+```
+
+
+### Isolation of PT cluster
+
+```{r}
+pt.cluster <- seurat[, seurat$Cluster_ident == 4]
+DotPlot(seurat, features = c("SLC3A1"))
+```
+
+
+To plot information on on the tsne dimensional reduction, we can call either DimPlot for categorical (clusters, samples etc) or FeaturePlot for continual (gene expression levels, mitochondrial percentage etc.)
+
+```{r}
+DimPlot(seurat, group.by = "Phase") + 
+  labs(title = "Cell cycle phases in seurat organoid dataset")
+FeaturePlot(seurat, features = "G2M.Score")
+```
+
+Correction for dotplots: replace underscores with dots in pt cluster (recognise that there are 2 different samples. 
+
+
+```{r}
+pt.cluster$sample <- gsub(pattern = "_",
+                      replacement = ".",
+                      x = pt.cluster$sample)
+```
+
+#### Identifying DE genes in PT clusters
+
+Unbiased comparisson of differentially expressed genes between samples in the isolated pt.cluster. 
+ 
+  1) Make new object - pt.cluster. 
+
+```{r}
+pt.cluster <- SetIdent(pt.cluster, value = "sample")
+
+```
+ 
+  2) Make new vector called pt.markers in which to show DE markers - selecting the object above (pt.cluster)
+  
+```{r}
+pt.markers <- FindAllMarkers(object = pt.cluster, # select object
+                          logfc.threshold = 0.25, # the threshold above which genes must be DE to be called markers. 
+                          min.pct = 0.1, # minimum % of cells in the cluster a marker must be expressed in. A gene like WNT9B which is expressed highly but in a small number of cells in a population could potentially be missed with this variable. 10% of a population is reasonable for most genes though.
+                          only.pos = T, # set to TRUE will only return genes that are increased, not decreased. Simplifies outcome, can look at decreased genes specifically if needed.
+                          return.thresh = 0.05, # will only return results with a p < specified value
+                          )
+```
+
+Export as .csv (Toppfunn analysis)
+
+
+```{r}
+# export the markers file as a csv
+write_csv(pt.markers, path = "output/pt_markers.csv")
+
+# export markers as an excel table divided by cluster
+# generate a list where each component is a filtered table of each cluster's markers
+
+export.pt_markers <- lapply(unique(pt.cluster@active.ident),
+                         function(x) {
+    pt.markers %>%
+        dplyr::filter(cluster == x, p_val_adj < 0.05, avg_logFC > 0) %>%
+        dplyr::arrange(-avg_logFC) %>%
+        select(Gene = gene, LogFC = avg_logFC, pVal = p_val_adj)
+})
+# export the table to excel file
+
+WriteXLS::WriteXLS(export.pt_markers,
+                   ExcelFileName = "output/pt_cluster_markers.xls",
+                   SheetNames = paste0(
+                                    (unique(pt.cluster@active.ident))))
+```
+
+
+Dot plot from the whole pt.cluster object, using the new vector pt.markers, looking in column 'gene'.
+
+```{r}
+DotPlot(pt.cluster, features = unique(pt.markers$gene), split.by = "sample", assay = "RNA", cols = c("blue", "red")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(legend.title=element_text(size=rel(0.5))) + 
+  theme(panel.grid.major = element_line(colour = "lightgray"))
+```
+
+
+
+#### PT marker analyses
+
+
+```{r}
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("CUBN", "LRP2", "HNF4A", "GGT1", "METTL7B", "ANPEP"), split.plot = TRUE)
+
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("SLC3A1", "SLC3A2","SLC7A7", "SLC7A8", "SLC37A4", "SLC47A1"), split.plot = TRUE)
+
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("AMN", "ACE2", "TMEM27"), split.plot = TRUE)
+
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("SLC22A2", "SLC22A6"), split.plot = TRUE)
+
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("PPARG", "FABP3", "PRKAA2", "FAT1"), split.plot = TRUE)
+
+```
+```{r}
+png(filename = "output/PT_markers_comparisson_combined_Revision_1.png", width = 400, height = 150, units = "mm", res = 600)
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("CUBN", "LRP2", "HNF4A", "GGT1", "METTL7B", "ANPEP"), split.plot = TRUE)
+dev.off()
+
+png(filename = "output/PT_markers_comparisson_combined_Revision_2.png", width = 400, height = 150, units = "mm", res = 600)
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("SLC3A1", "SLC3A2","SLC7A7", "SLC7A8", "SLC37A4", "SLC47A1"), split.plot = TRUE)
+dev.off()
+
+png(filename = "output/PT_markers_comparisson_combined_Revision_3.png", width = 400, height = 75, units = "mm", res = 600)
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("AMN", "ACE2", "TMEM27"), split.plot = TRUE)
+
+dev.off()
+
+png(filename = "output/PT_markers_comparisson_combined_Revision_4.png", width = 267, height = 75, units = "mm", res = 600)
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("SLC22A2", "SLC22A6"), split.plot = TRUE)
+
+png(filename = "output/PT_markers_comparisson_combined_Revision_5.png", width = 400, height = 150, units = "mm", res = 600)
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.5, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("PPARG", "FABP3", "PRKAA2", "FAT1"), split.plot = TRUE)
+
+```
+
+
+
+## COVID project analyses
+
+
+```{r}
+
+FeaturePlot(TAL_DT.clusters, features = "TMPRSS2", split.by = "sample", cols = c("grey", "red"), order = T)
+VlnPlot(TAL_DT.clusters, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("TMPRSS2"))
+
+FeaturePlot(TAL_DT.clusters, features = "ADAM17", split.by = "sample", cols = c("grey", "red"), order = T)
+VlnPlot(TAL_DT.clusters, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("ADAM17"))
+
+
+
+# Patchwork package
+
+library(patchwork)
+
+(FeaturePlot(TAL_DT.clusters[, TAL_DT.clusters$sample=="D18.SIX2Cre.standard.E6"], features = "TMPRSS2", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(TAL_DT.clusters[, TAL_DT.clusters$sample=="SIX2Cre.extdiff"], features = "TMPRSS2", cols = c("grey", "red"), order = T)) +
+  
+  plot_layout(ncol = 2, design = "AB") 
+
+
+library(patchwork)
+
+(FeaturePlot(TAL_DT.clusters[, TAL_DT.clusters$sample=="D18.SIX2Cre.standard.E6"], features = "ADAM17", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(TAL_DT.clusters[, TAL_DT.clusters$sample=="SIX2Cre.extdiff"], features = "ADAM17", cols = c("grey", "red"), order = T)) +
+  
+  plot_layout(ncol = 2, design = "AB") 
+
+
+# Export above plots as .png files
+
+png(filename = "output/STDvEXT_COVIDproject_DTclusters_VlnPlot_TMPRSS2.png", width = 200, height = 100, units = "mm", res = 600) 
+VlnPlot(TAL_DT.clusters, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("TMPRSS2"))
+dev.off() 
+
+png(filename = "output/STDvEXT_COVIDproject_DTclusters_VlnPlot_ADAM17.png", width = 200, height = 100, units = "mm", res = 600) 
+VlnPlot(TAL_DT.clusters, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("ADAM17"))
+dev.off()
+
+png(filename = "output/STDvEXT_COVIDproject_DTclusters_FeatrPlots_TMPRSS2.png", width = 250, height = 100, units = "mm", res = 600)
+(FeaturePlot(TAL_DT.clusters[, TAL_DT.clusters$sample=="D18.SIX2Cre.standard.E6"], features = "TMPRSS2", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(TAL_DT.clusters[, TAL_DT.clusters$sample=="SIX2Cre.extdiff"], features = "TMPRSS2", cols = c("grey", "red"), order = T)) +
+  
+  plot_layout(ncol = 2, design = "AB")
+dev.off() 
+
+png(filename = "output/STDvEXT_COVIDproject_DTclusters_FeatrPlots_ADAM17.png", width = 250, height = 100, units = "mm", res = 600)
+(FeaturePlot(TAL_DT.clusters[, TAL_DT.clusters$sample=="D18.SIX2Cre.standard.E6"], features = "ADAM17", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(TAL_DT.clusters[, TAL_DT.clusters$sample=="SIX2Cre.extdiff"], features = "ADAM17", cols = c("grey", "red"), order = T)) +
+  
+  plot_layout(ncol = 2, design = "AB")
+dev.off() 
+
+
+
+```
+
+```{r}
+# Other entry factors in the proximal cluster
+
+# TMPRSS2 in the distal clusters
+
+FeaturePlot(pt.cluster, features = "ACE2", split.by = "sample", cols = c("grey", "red"), order = T)
+FeaturePlot(pt.cluster, features = "ANPEP", split.by = "sample", cols = c("grey", "red"), order = T)
+FeaturePlot(pt.cluster, features = "BSG", split.by = "sample", cols = c("grey", "red"), order = T)
+FeaturePlot(pt.cluster, features = "DPP4", split.by = "sample", cols = c("grey", "red"), order = T)
+FeaturePlot(pt.cluster, features = "CTSB", split.by = "sample", cols = c("grey", "red"), order = T)
+FeaturePlot(pt.cluster, features = "CTSL", split.by = "sample", cols = c("grey", "red"), order = T)
+
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), split.by = "sample", features = c("ACE2"))
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), split.by = "sample", features = c("ANPEP"))
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), split.by = "sample", features = c("BSG"))
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), split.by = "sample", features = c("DPP4"))
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), split.by = "sample", features = c("CTSB"))
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), split.by = "sample", features = c("CTSL"))
+
+
+# Below Patchwork package allows plots to be displayed together and individual colourings to be applied. plot_layout function controls display
+
+library(patchwork)
+
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "ACE2", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "ACE2", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "ANPEP", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "ANPEP", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "BSG", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "BSG", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "DPP4", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "DPP4", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "CTSB", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "CTSB", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "CTSL", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "CTSL", cols = c("grey", "red"), order = T))+ 
+  plot_layout(ncol = 12, design = "AB
+              CD
+              EF
+              GH
+              IJ
+              KL") 
+
+```
+
+Expot the above plots:
+
+```{r}
+png(filename = "output/STDvEXT_COVIDproject_PTcluster_VlnPlot_ACE2.png", width = 200, height = 100, units = "mm", res = 600) 
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), 
+        split.by = "sample", features = c("ACE2"))
+dev.off() 
+
+png(filename = "output/STDvEXT_COVIDproject_PTcluster_VlnPlot_ANPEP.png", width = 200, height = 100, units = "mm", res = 600) 
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), 
+        split.by = "sample", features = c("ANPEP"))
+dev.off() 
+
+png(filename = "output/STDvEXT_COVIDproject_PTcluster_VlnPlot_BSG.png", width = 200, height = 100, units = "mm", res = 600) 
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), 
+        split.by = "sample", features = c("BSG"))
+dev.off() 
+
+png(filename = "output/STDvEXT_COVIDproject_PTcluster_VlnPlot_DPP4.png", width = 200, height = 100, units = "mm", res = 600) 
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), 
+        split.by = "sample", features = c("DPP4"))
+dev.off() 
+
+png(filename = "output/STDvEXT_COVIDproject_PTcluster_VlnPlot_CTSB.png", width = 200, height = 100, units = "mm", res = 600) 
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), 
+        split.by = "sample", features = c("CTSB"))
+dev.off() 
+
+png(filename = "output/STDvEXT_COVIDproject_PTcluster_VlnPlot_CTSL.png", width = 200, height = 100, units = "mm", res = 600) 
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"), 
+        split.by = "sample", features = c("CTSL"))
+dev.off() 
+
+png(filename = "output/STDvEXT_COVIDproject_PTcluster_FeatrPlots_All.png", width = 750, height = 500, units = "mm", res = 600)
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "ACE2", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "ACE2", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "ANPEP", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "ANPEP", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "BSG", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "BSG", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "DPP4", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "DPP4", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "CTSB", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "CTSB", cols = c("grey", "red"), order = T)) +
+  (FeaturePlot(pt.cluster[, pt.cluster$sample=="D18.SIX2Cre.standard.E6"], features = "CTSL", cols = c("grey", "blue"), order = T)) +
+(FeaturePlot(pt.cluster[, pt.cluster$sample=="SIX2Cre.extdiff"], features = "CTSL", cols = c("grey", "red"), order = T))+ 
+  plot_layout(ncol = 12, design = "AB
+              CD
+              EF
+              GH
+              IJ
+              KL") 
+
+
+dev.off()
+```
+
+
+## Drug transporters
+
+```{r}
+StrDotPlot(pt.cluster, features = rev (c("SLC22A2", "SLC22A6")), group.by = "Cluster_ident", assay = "RNA", dot.min = 0.01, dot.scale = 10)
+
+DotPlot(pt.cluster, features = c("SLC22A6", "SLC22A2"), group.by = "sample", dot.scale = 10, scale = FALSE)
+DotPlot(pt.cluster, features = c("SLC22A6", "SLC22A2"), group.by = "sample", dot.scale = 10)
+
+```
+```{r}
+#export the above
+
+png(filename = "output/PT_drug-transporters_comparisson_1.png", width = 190, height = 90, units = "mm", res = 1200)
+DotPlot(pt.cluster, features = c("SLC22A6", "SLC22A2"), group.by = "sample", dot.scale = 10, scale = FALSE)
+dev.off()
+```
+
+## Cisplatin influx & efflux transporters
+
+```{r}
+DotPlot(pt.cluster, features = c("LRP2", "SLC22A8", "SLC22A6", "SLC22A2", "SLC47A1", "ABCG2", "ABCC4", "ABCB1"), group.by = "sample", dot.scale = 10) + theme(axis.text.x=element_text(angle = 45, hjust = 0.9, vjust = 1))
+
+```
+```{r}
+# export the above cisplatin plot:
+
+png(filename = "output/PT_cisplatin-influx-efflux_Std-vs-Ext-orgs_1.png", width = 190, height = 120, units = "mm", res = 1200)
+DotPlot(pt.cluster, features = c("LRP2", "SLC22A8", "SLC22A6", "SLC22A2", "SLC47A1", "ABCG2", "ABCC4", "ABCB1"), group.by = "sample", dot.scale = 10) + theme(axis.text.x=element_text(angle = 45, hjust = 0.9, vjust = 1))
+dev.off()
+
+```
+
+
+## Metabolic profile analyses
+
+```{r}
+
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("PRKAA2", "FAT1", "FABP3", "PPARG"), split.plot = TRUE)
+```
+```{r}
+# export the above plot
+
+png(filename = "output/PT_metabolism_comparisson_combined.png", width = 600, height = 300, units = "mm", res = 600)
+VlnPlot(pt.cluster, group.by = "Cluster_ident", pt.size = 0.01, assay = "RNA", cols = c("blue", "red"),
+        split.by = "sample", features = c("PRKAA2", "FAT1", "FABP3", "PPARG"), split.plot = TRUE)
+dev.off()
+
+
+```
+
+
+
+
+#
+
+# Saving 
+
+
+```{r}
+write_rds(x = seurat, file = "output/SIX2Cre-extended_SIX2Cre-standard.rds")
+
+# Can also type this into conside below: write_rds(seurat,"SIX2Cre-extended_SIX2Cre-standard.rds"). This saves the RDS file, but not the Rmd (R Markdown file) - make sure you occasionally save this or save when you close the window.
+
+```
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
