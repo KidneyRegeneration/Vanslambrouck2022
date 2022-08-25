@@ -1,4 +1,4 @@
-Repository for code related to Vanslambrouck et al paper under review
+Repository for code related to Vanslambrouck et al 2022
 
 
 
