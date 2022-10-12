@@ -9,17 +9,9 @@
 
 <br>
 
-![](docs/twitter.png){width=50px} [Check out the tweetorial from first author Jess describing the study](https://twitter.com/JMVanslambrouck/status/1579397772645912578) <br>
+[Check out the tweetorial from first author Jess describing the study](https://twitter.com/JMVanslambrouck/status/1579397772645912578) <br>
 
-<br>
 
-The altmetric score of this publication is:
-
-```{=html}
-<script type="text/javascript" src="https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js"></script>
-```
-::: {.altmetric-embed data-badge-type="medium-donut" data-badge-details="right" data-doi="10.1038/s41467-022-33623-z"}
-:::
 
 <br>
 
