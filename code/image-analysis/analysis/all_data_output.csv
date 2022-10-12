@@ -1,0 +1,7 @@
+,file,condition,bead_radius,gloms_in_radius,ltl_in_radius,epcam_in_radius,proximal_in_radius,distal_in_radius,tissue_in_radius
+0,IWR1 10uM_n=1_10X 1.0zoom 2x2tile.czi,IWR,1905017,495180,41898,92217,41623,50594,577495
+1,IWR1 10uM_n=2_10X 1.0zoom 2x2tile.czi,IWR,1436790,592680,27171,69770,24449,45321,621571
+2,IWR1 10uM_n=3_10X 1.0zoom 2x2tile.czi,IWR,1732366,746348,40231,99303,37329,61974,838595
+3,PBS control_n=1_10X 1.0zoom 2x2tile.czi,PBS,1995803,722679,115372,241557,100044,141513,946907
+4,PBS control_n=2_10X 1.0zoom 2x2tile.czi,PBS,1404122,651280,78934,203536,70993,132543,825990
+5,PBS control_n=3_10X 1.0zoom 2x2tile.czi,PBS,1877655,734616,72331,204901,70496,134405,916286

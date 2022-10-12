@@ -1,14 +1,26 @@
-Repository for code related to Vanslambrouck et al 2022
+# Vanslambrouck2022
+
+
+To further interact with the work in this paper, check out our [workflowr gitpage](https://github.com/) showing the analysis and output relating to **[Vanslambrouck et al., 2022](https://www.nature.com/articles/s41467-022-33623-z): ;** *Nature Communications*  
+<br>
 
 
 
-<H3>Image Analysis</H3>
-
-The image-analysis folder contains data and code used to quantify organoid tissue patterning within the proximity of IWR-soaked, or control beads. Analysis can be replicated by running the two included Jupyter Notebooks in order. An environment yml file is included to replicate the Conda Python environment used for analysis.
-
-The first step in the analysis '01 read data and annotate' involves loading each image in sequence and manually annotating beads using the Napari viewer. As the output will vary between users we have included the annotation masks used for analysis (files 'labels_01.tif, labels_02.tif.....etc'). All output, including csv summary data and plots used for figures can be re-created by running the second notebook '02 analysis'.
 
 
-<H3>Single Cell RNAseq</H3>
+## Authors
+[Jessica M. Vanslambrouck]() (lead author, contact)<br>
+[Melissa H. Little]() (senior author, contact) <br> 
+[Sean B. Wilson]():  co-second author, repository maintainer; [GitHub](https://github.com/sbwilson91);<br>
+[Kynan Lawlor](https://github.com/kynanlawlor)
+Ker Sin Tan (co-second author)<br>
 
-The pipeline for single cell transcriptomic analysis described in the paper is present in the scRNAseq folder
+<br>
+
+
+## Data availability
+The data used in this work is available at the following locations:<br>
+[](): hPSC-derived sequencing data including bulk and single cell RNA-seq<br>
+
+This website was built using the amazing [workflowr][https://github.com/workflowr/workflowr] package.
+<br>

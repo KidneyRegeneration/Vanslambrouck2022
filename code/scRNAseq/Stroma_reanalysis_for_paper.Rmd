@@ -1,0 +1,118 @@
+---
+title: "Stromal analysis for paper"
+author: "Sean Wilson"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+    toc: true
+knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_dir = "docs/")})
+---
+
+
+# Update for paper
+
+```{r setup, include=FALSE}
+library(knitr)
+library(Seurat)
+library(tidyverse)
+library(scPred)
+devtools::load_all("/group/kidn1/Group-Little_MCRI/People/Sean/PhD/R-projects/SeansKit/")
+devtools::load_all("/group/kidn1/Group-Little_MCRI/People/Sean/PhD/R-projects/DevKidCC/")
+seed <- 250395
+opts_chunk$set(echo=FALSE,
+               warning=FALSE)
+```
+
+
+```{r, include=FALSE}
+extdiff <- read_rds("/group/kidn1/Group-Little_MCRI/People/JessV/Profiling/DD156_1502cln2_ExtDiff_CDBLY2_scRNASeq/output/rds/ExtDiff_Merge.rds")
+extdiff$SCT_snn_res.1 <- factor(extdiff$SCT_snn_res.1, levels = 0:23)
+```
+
+There is a huge stromal compartment in the organoids:
+
+## What is the stroma
+
+***Decided to use the DevKidCC result which we already reported and supplement with only the England paper markers***<br>
+
+```{r, include=FALSE}
+extdiff[, extdiff$age == "D13p14"]$LineageID %>% table()
+extdiff[, extdiff$age == "D13p14"]$DKCC %>% table()
+
+extdiff[, extdiff$age == "D13"]$LineageID %>% table()
+extdiff[, extdiff$age == "D13"]$DKCC %>% table()
+```
+
+```{r, include=FALSE, eval=FALSE}
+markers <- FindAllMarkers(SetIdent(extdiff[, extdiff$age == "D13p14"], value = "LineageID"), only.pos = T, test.use = "t", logfc.threshold = 0.5)
+markers %>% filter(cluster=="Stroma") %>% arrange(-avg_logFC) %>% head(20) %>% kable()
+markers %>% filter(cluster=="unassigned") %>% arrange(-avg_logFC) %>% head(20) %>% kable()
+
+```
+
+```{r, fig.width=9, fig.height=3.5, warning=FALSE, dpi=600}
+england.markers <- c("FOXD1", "NTN1", "FIBIN","DLK1","MEIS1", "MEIS2", "SNAI2", "LOX", "PENK", "WNT4", "IGF1")
+antags <- c("SFRP1",
+            "SFRP2",
+            "DKK1",
+            "DKK3")
+p3 <- StrDotPlot(extdiff[, extdiff$age == "D13p14"], group.by = "LineageID", features = c(england.markers, "OGN", "MGP", "COL2A1", antags), dot.scale = 6, col.min = 1, scale = F) + theme(axis.title = element_blank())
+p3
+```
+
+```{r, fig.width=10, fig.height=4, warning=FALSE, dpi=600}
+england.markers <- c("FOXD1", "NTN1", "FIBIN","DLK1","MEIS1", "MEIS2", "SNAI2", "LOX", "PENK", "WNT4", "IGF1")
+antags <- c("SFRP1",
+            "SFRP2",
+            "DKK1",
+            "DKK3")
+p4 <- StrDotPlot(extdiff[, extdiff$age == "D13"], group.by = "LineageID", features = c(england.markers, "OGN", "MGP", "COL2A1", antags), dot.scale = 6, col.min = 1, scale = F) + theme(axis.title = element_blank())
+p4
+
+extdiff$age_id <- paste0(extdiff$age, "_", extdiff$LineageID)
+
+p5 <- StrDotPlot(extdiff, group.by = "age_id", features = c(england.markers, "OGN", "MGP", "COL2A1", antags), dot.scale = 6, col.min = 1, scale = F) + theme(axis.title = element_blank())
+p5
+```
+
+
+```{r, fig.height=5, fig.width=14, dpi=300}
+dp1 <- (DotPlotCompare(extdiff[, extdiff$age=="D13p14"], split.by = "age", features = c(england.markers, "OGN", "MGP", "COL2A1", antags), show = "idents",
+                compare.to.organoids = T, idents = c("CS", "unassigned"), columns = 2, filter.samples = GetSampleIDs(base_protocol = "Takasato", age = 25:26))) 
+dp1
+```
+
+When the 13+14 organoids were classified using DevKidCC, 48.2% of cells were identified as stromal, with 94.0% of these cortical stroma. This population is enriched for known stromal markers *CRABP1*, *COL3A1*, *COL1A1*, *COL1A2* and *CXCL12*. 23.8% of cells remained unassigned and are enriched for additional collagens such as *COL2A1* and *COL9A1* as well as a strong signature of cell cycling (*HIST1H4C*, *CENPF* and *TOP2A*). Markers of the cortical stroma identified in mice (England et al. 2020) including *FIBIN*, *DLK1*, *MEIS1*, *MEIS2* and *SNAI2* (*Slug* in mice) were shown to be enriched in the stroma, NPC-like and unassigned cell populations, while stromal progenitor cell markers *FOXD1* and *NTN1* were absent, as were medullary stromal markers *LOX*, *PENK* and *WNT4*. As such the classification from DevKidCC correlates with the published marker expression profiles showing that the stromal cells generated in these organoids are most like those of the kidney cortex. Two cartilage associated genes, *OGN* and *MGP*, are also enriched in the stromal and unassigned populations. *OGN* and *MGP* have recently been identified as differentially expressed in mouse stromal cells (Tanigawa et al 2022 supplementary DE gene lists) yet are also known as markers of cartilage formation. Direct comparison to the stromal and unassigned populations from previously analysed organoids showed these genes were more strongly expressed and in more cells than previously analysed standard organoids. We further analysed the expression of known Wnt antagonists and identified that *SFRP2* was strongly expressed in these populations of PT-enhanced organoids, coexpressed with *OGN*, *MGP* and *COL2A1*, providing a potential mechanism for the radial patterning seen.<br>
+<br>
+Of the day 13 population, only 0.9% of cells had committed to the stromal lineage, while 52.3% were not assigned to a kidney identity. DevKidCC identifies an "NPC-like" population that has high similarity to the NPC cell population however lacks key NPC markers such as *PAX8* and *SIX2*. It is possible that in the *in vitro* cultures either the NPC-like and/or unassigned cells give rise to the eventual stroma and cartilage populations in the organoids. Indeed, using Azimuth to perform a label transfer of from a human fetal developing dataset onto the day 13 cells, the most similar population is the "metanephric" cells. To confirm stromal and cartilage origins *in vitro*, studies of direct lineage tracing would be required which is beyond the scope of this study.
+
+```{r, include=FALSE}
+mes.small <- read_rds("Mes_small_sce.rds")
+mes.small <- as.Seurat(mes.small)
+mes.all <- read_rds("Stroma.rds")
+mes <- mes.all[, mes.all$age=="D13"]
+```
+
+
+```{r, fig.height=4, fig.width=6}
+ap1 <- (VlnPlot(mes.small[, mes.small$age == "D13"], 
+        features = "predicted.annotation.l1.score", group.by = "predicted.annotation.l1", pt.size = 0.1) + NoLegend() + ggtitle("D13") + 
+   geom_hline(yintercept = c(0.75, 0.5, 0.25)))
+ap1
+
+```
+
+```{r}
+int.orgs <- read_rds("1502cln2-D13p14_vs_MAFB-GATA3-D7p18/1502-D13p14_vs_MAFB-GATA3-D7p18.rds")
+```
+
+```{r}
+int.orgs %>% DimPlot(group.by = "orig.ident")
+int.orgs$Cluster_ident %>% table()
+```
+
+
+
+

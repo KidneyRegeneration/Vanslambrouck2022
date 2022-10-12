@@ -1,0 +1,27 @@
+name: Vanslambrouck2022
+output_dir: ../docs
+navbar:
+  title: Vanslambrouck2022
+  left:
+  - text: Home
+    href: index.html
+  - text: About
+    href: about.html
+  - text: License
+    href: license.html
+  - text: HTO
+    href: HTO_for_Seurat.html
+  - text: scRNA
+    href: scRNA_Figs_Sean.html
+  - text: Stroma
+    href: Stroma_reanalysis.html
+  right:
+  - icon: fa-github
+    text: Source code
+    href: https://github.com/KidneyRegeneration/Vanslambrouck2022
+output:
+  workflowr::wflow_html:
+    toc: yes
+    toc_float: yes
+    theme: cosmo
+    highlight: textmate
