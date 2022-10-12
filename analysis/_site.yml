@@ -5,10 +5,6 @@ navbar:
   left:
   - text: Home
     href: index.html
-  - text: About
-    href: about.html
-  - text: License
-    href: license.html
   - text: HTO
     href: HTO_for_Seurat.html
   - text: scRNA
