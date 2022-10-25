@@ -5,12 +5,20 @@ navbar:
   left:
   - text: Home
     href: index.html
-  - text: HTO
-    href: HTO_for_Seurat.html
-  - text: scRNA
-    href: scRNA_Figs_Sean.html
-  - text: Stroma
-    href: Stroma_reanalysis.html
+  - text: Transcriptomics
+    menu:
+    - text: HTO demux
+      href: HTO_for_Seurat_2.html
+    - text: DevKidCC overview
+      href: scRNA_Figs_Sean.html
+    - text: Stromal populations
+      href: Stroma_reanalysis.html
+  - text: Image analysis
+    menu:
+    - text: Processing
+      href: image_analysis_a.html
+    - text: Analysis
+      href: image_analysis_b.html
   right:
   - icon: fa-github
     text: Source code
