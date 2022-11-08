@@ -1,1 +1,11 @@
-/image-analysis/analysis/.ipynb_checkpoints
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.Rapp.history
+.DS_Store
+analysis/figure
+analysis/*png
+analysis/*html
+analysis/*_cache
+analysis/site_libs

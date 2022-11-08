@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Kynan Lawlor" />
+
+
+<title>Image processing</title>
+
+<script src="site_libs/header-attrs-2.17/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
+
+<link rel="icon" href="https://github.com/workflowr/workflowr-assets/raw/main/img/reproducible.png">
+<!-- Add a small amount of space between sections. -->
+<style type="text/css">
+div.section {
+  padding-top: 12px;
+}
+</style>
+
+
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Vanslambrouck2022</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Transcriptomics
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="HTO_for_Seurat.html">HTO demux</a>
+    </li>
+    <li>
+      <a href="scRNA_Figs_Sean.html">DevKidCC overview</a>
+    </li>
+    <li>
+      <a href="Stroma_reanalysis.html">Stromal populations</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Image analysis
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="image_analysis_a.html">Processing</a>
+    </li>
+    <li>
+      <a href="image_analysis_b.html">Analysis</a>
+    </li>
+  </ul>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        <li>
+  <a href="https://github.com/KidneyRegeneration/Vanslambrouck2022">
+    <span class="fa fa-github"></span>
+     
+    Source code
+  </a>
+</li>
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Image processing</h1>
+<h4 class="author">Kynan Lawlor</h4>
+
+</div>
+
+
+<p>Note: Original analysis run using jupyter notebooks, transcribed for website presentation.</p>
+<pre class="python"><code>import czifile
+from skimage import io
+import numpy as np
+import matplotlib.pyplot as plt
+import napari
+from glob import glob
+from os import path
+import scipy
+import pandas as pd
+from skimage.filters import threshold_otsu, threshold_multiotsu
+from scipy import ndimage</code></pre>
+<pre class="python"><code>#function for reading czi files
+def read_czi(file_path):
+    img = czifile.imread(file_path)
+    img = img[0,0,:,0,0,:,:,0] # remove extra dimensions
+    return (img)</code></pre>
+<pre class="python"><code>img_files = sorted(glob(&quot;../data/*.czi&quot;))
+file_names = [path.basename(a) for a in img_files]
+
+print(file_names)</code></pre>
+<pre class="python"><code>#generate sample matrix to check that conditions correctly match
+
+condition = [&quot;IWR&quot;, &quot;IWR&quot;, &quot;IWR&quot;, &quot;PBS&quot;, &quot;PBS&quot;, &quot;PBS&quot;]
+sample_matrix = pd.DataFrame({&#39;file&#39;:file_names, &#39;condition&#39;: condition})
+sample_matrix</code></pre>
+<pre class="python"><code>#load all image files and annotation files and check that dimensions and indicies are correct
+
+img_list = []
+labels_list = []
+
+for file_idx, name in enumerate(img_files):
+    print(file_idx)
+    
+    labels_file = &#39;labels_&#39; + str(file_idx) + &quot;.tif&quot;
+    print(labels_file)
+    labels = io.imread(labels_file)
+    print(labels.shape)
+    labels_list.append(labels)
+    
+    print(name)
+    print(path.exists(name))
+    img = read_czi(name)
+    print(img.shape)
+    img_list.append(img)</code></pre>
+<pre class="python"><code>#function for thresholding using standard otsu method afer gaussian filter.
+def gauss_and_thresh(image, sigma = 5):
+    image = ndimage.gaussian_filter(image, sigma)
+    thresh = threshold_otsu(image)
+    print(thresh)
+    return (image &gt; thresh)
+
+#function for thresholding using multi-otsu after gaussian filter.
+def gauss_and_multithresh(image, sigma = 5):
+    image = ndimage.gaussian_filter(image, sigma)
+    thresh = threshold_multiotsu(image)
+    print(thresh)
+    return (image &gt; thresh[1])
+
+#define variables to store output
+beads_dist_map = []
+epcam_segs = []
+ltl_segs = []
+glom_segs = []
+prox_segs = []
+dist_segs = []
+beads_lines = []
+
+#metrics for plotting
+rad = [] #beads radius
+gir = [] #gloms in radius
+lir = [] #ltl in radius
+eir = [] #epcam in radius
+prir = [] #prox in radius
+dtir = [] #distal in radius
+glepir = [] #glom + epcam in radius
+
+for labels, img in zip(labels_list, img_list):
+    
+    #define distance from beads using distance transform
+    
+    binary_beads = labels &gt; 0
+    binary_beads = 1 - binary_beads.astype(&#39;int&#39;)
+    beads_dist = scipy.ndimage.morphology.distance_transform_edt(binary_beads)
+    beads_dist_map.append(beads_dist)
+    
+    #segmentation
+    
+    glom = gauss_and_thresh(img[0,:,:], sigma = 5)
+    glom_segs.append(glom)
+    
+    ltl = gauss_and_multithresh(img[2,:,:], sigma = 5)
+    ltl_segs.append(ltl)
+    
+    epcam = gauss_and_multithresh(img[3,:,:], sigma = 5)
+    epcam_segs.append(epcam)
+    
+    #define radius
+    beads_radius = beads_dist &lt; 200
+    rad.append(np.sum(beads_radius))
+    
+    #define line used for generating visualisation
+    beads_line = (beads_dist &gt; 195) &amp; (beads_dist &lt; 205)
+    beads_lines.append(beads_line)
+    
+    #find segmented pixels in radius
+    glom_in_radius = glom &amp; beads_radius
+    gir.append(np.sum(glom_in_radius))
+    
+    ltl_in_radius = ltl &amp; beads_radius
+    lir.append(np.sum(ltl_in_radius))
+    
+    epcam_in_radius = epcam &amp; beads_radius
+    eir.append(np.sum(epcam_in_radius))
+    
+    glom_plus_epcam = epcam_in_radius + glom_in_radius
+    glepir.append(np.sum(glom_plus_epcam))
+    
+    proximal = ltl &amp; epcam
+    prox_segs.append(proximal)
+    prox_in_radius = proximal &amp; beads_radius
+    prir.append(np.sum(prox_in_radius))
+    
+    distal = np.invert(ltl) &amp; epcam
+    dist_segs.append(distal)
+    dist_in_radius = distal &amp; beads_radius
+    dtir.append(np.sum(dist_in_radius))
+    
+    print(&quot;total pixels in radius: {}&quot;.format(np.sum(beads_radius)))
+    
+    print(&quot;gloms in radius: {}&quot;.format(np.sum(glom_in_radius)))
+    print(&quot;glom %: {}&quot;.format(np.sum(glom_in_radius) / np.sum(beads_radius)))
+    
+    print(&quot;ltl in radius: {}&quot;.format(np.sum(ltl_in_radius)))
+    print(&quot;ltl %: {}&quot;.format(np.sum(ltl_in_radius) / np.sum(beads_radius)))
+    
+    print(&quot;epcam in radius: {}&quot;.format(np.sum(epcam_in_radius)))
+    print(&quot;epcam %: {}&quot;.format(np.sum(epcam_in_radius) / np.sum(beads_radius)))
+    
+    print(&quot;total proximal pixels in radius: {}&quot;.format(np.sum(prox_in_radius)))
+    print(&quot;proximal %: {}&quot;.format(np.sum(prox_in_radius) / np.sum(beads_radius)))
+    
+    print(&quot;total distal pixels in radius: {}&quot;.format(np.sum(dist_in_radius)))
+    print(&quot;distal %: {}&quot;.format(np.sum(dist_in_radius) / np.sum(beads_radius)))</code></pre>
+<pre class="python"><code>all_data = pd.concat([sample_matrix, 
+           pd.Series(data = rad, name = &quot;bead_radius&quot;),
+           pd.Series(data = gir, name = &quot;gloms_in_radius&quot;),
+           pd.Series(data = lir, name = &quot;ltl_in_radius&quot;),
+           pd.Series(data = eir, name = &quot;epcam_in_radius&quot;),
+           pd.Series(data = prir, name = &quot;proximal_in_radius&quot;),
+           pd.Series(data = dtir, name = &quot;distal_in_radius&quot;), 
+            pd.Series(data = glepir, name = &quot;tissue_in_radius&quot;)], axis = 1)
+
+all_data</code></pre>
+<pre class="python"><code>#save all output to csv file
+
+all_data.to_csv(&quot;all_data_output.csv&quot;)</code></pre>
+<pre class="python"><code>#code for generating plots
+
+fig, axs = plt.subplots(1, 7, figsize=(14, 3))
+
+cond = all_data[&#39;condition&#39;]
+total_bead_area = all_data[&quot;bead_radius&quot;] / 1000000
+total_tissue = all_data[&quot;tissue_in_radius&quot;] / 1000000
+dist = all_data[&quot;distal_in_radius&quot;] / all_data[&quot;tissue_in_radius&quot;] * 100
+prox = all_data[&quot;proximal_in_radius&quot;] / all_data[&quot;tissue_in_radius&quot;] * 100
+glom = all_data[&quot;gloms_in_radius&quot;] / all_data[&quot;tissue_in_radius&quot;] * 100
+ltl = all_data[&quot;ltl_in_radius&quot;] / all_data[&quot;tissue_in_radius&quot;] * 100
+epcam = all_data[&quot;epcam_in_radius&quot;] / all_data[&quot;tissue_in_radius&quot;] * 100
+
+axs[0].plot(cond, total_bead_area, marker=&#39;o&#39;, linestyle=&#39;&#39;, ms=12, alpha = 0.5)
+axs[0].margins(0.5,0.2)
+axs[0].set_ylim([0,2.5])
+axs[0].invert_xaxis()
+axs[0].set_title(&quot;Total area (10^6 pix)&quot;)
+
+axs[1].plot(cond, total_tissue, marker=&#39;o&#39;, linestyle=&#39;&#39;, ms=12, alpha = 0.5)
+axs[1].margins(0.5,0.2)
+axs[1].set_ylim([0,2.5])
+axs[1].invert_xaxis()
+axs[1].set_title(&quot;Nephron area (10^6 pix)&quot;)
+
+axs[2].plot(cond, glom, marker=&#39;o&#39;, linestyle=&#39;&#39;, ms=12, alpha=0.5)
+axs[2].margins(0.5,0.2)
+axs[2].set_ylim([0,100])
+axs[2].invert_xaxis()
+axs[2].set_title(&quot;% NPHS1&quot;)
+
+axs[3].plot(cond, epcam, marker=&#39;o&#39;, linestyle=&#39;&#39;, ms=12, alpha=0.5)
+axs[3].margins(0.5,0.2)
+axs[3].set_ylim([0,30])
+axs[3].invert_xaxis()
+axs[3].set_title(&quot;% EPCAM&quot;)
+
+axs[4].plot(cond, ltl, marker=&#39;o&#39;, linestyle=&#39;&#39;, ms=12, alpha=0.5)
+axs[4].margins(0.5,0.2)
+axs[4].set_ylim([0,30])
+axs[4].invert_xaxis()
+axs[4].set_title(&quot;% LTL&quot;)
+
+axs[5].plot(cond, dist, marker=&#39;o&#39;, linestyle=&#39;&#39;, ms=12, alpha=0.5)
+axs[5].margins(0.5,0.2)
+axs[5].set_ylim([0,30])
+axs[5].invert_xaxis()
+axs[5].set_title(&quot;% LTL- EPCAM+&quot;)
+
+axs[6].plot(cond, prox, marker=&#39;o&#39;, linestyle=&#39;&#39;, ms=12, alpha = 0.5)
+axs[6].margins(0.5,0.2)
+axs[6].set_ylim([0,30])
+axs[6].invert_xaxis()
+axs[6].set_title(&quot;% LTL+ EPCAM+&quot;)
+
+
+fig.tight_layout()
+plt.show()
+fig.savefig(&quot;finalplots.tif&quot;, dpi=300)</code></pre>
+<pre class="python"><code>#code for loading all segmented images into napari for visualisation.
+
+viewer = napari.view_image(np.array(img_list), channel_axis=1, colormap=[&quot;gray&quot;,&quot;yellow&quot;,&quot;green&quot;,&quot;blue&quot;])
+labels_layer = viewer.add_labels(np.array(labels_list), name=&quot;segmentation&quot;)
+dist_map = viewer.add_image(np.array(beads_dist_map), name=&quot;dist&quot;, colormap=&quot;viridis&quot;, blending = &#39;additive&#39;)
+glom_layer = viewer.add_image(np.array(glom_segs), name=&quot;glom&quot;, colormap=&quot;red&quot;, blending = &#39;additive&#39;)
+epcam_layer = viewer.add_image(np.array(epcam_segs), name=&quot;epcam&quot;, colormap=&quot;red&quot;, blending = &#39;additive&#39;)
+prox_layer = viewer.add_image(np.array(ltl_segs), name=&quot;ltl&quot;, colormap=&quot;green&quot;, blending = &#39;additive&#39;)
+#dist_layer = viewer.add_image(np.array(dist_segs), name=&quot;dist&quot;, blending = &#39;additive&#39;)
+radius_layer = viewer.add_image(np.array(beads_lines), name=&quot;radius&quot;, blending = &quot;additive&quot;)
+napari.run()</code></pre>
+<pre class="python"><code>#code for calculating mean values
+
+norm_values = all_data[&quot;tissue_in_radius&quot;]
+df = all_data[[&quot;gloms_in_radius&quot;,&quot;ltl_in_radius&quot;,&quot;epcam_in_radius&quot;,&quot;proximal_in_radius&quot;,&quot;distal_in_radius&quot;]] 
+df_norm = df.div(norm_values, axis=0) * 100
+df_norm = pd.concat([all_data[&quot;condition&quot;], df_norm], axis=1)
+
+print(df_norm)
+df_norm.groupby(&quot;condition&quot;).mean()</code></pre>
+<pre class="python"><code>#generate separate dataframe for each condition to allow t tests below.
+
+pbs = df_norm[df_norm[&#39;condition&#39;] == &#39;PBS&#39;]
+iwr = df_norm[df_norm[&#39;condition&#39;] == &#39;IWR&#39;]</code></pre>
+<pre class="python"><code>#performing t-tests
+
+print(&quot;% Nphs1: {}&quot;.format(scipy.stats.ttest_ind(pbs[&#39;gloms_in_radius&#39;],iwr[&#39;gloms_in_radius&#39;])))
+
+print(&quot;% LTL: {}&quot;.format(scipy.stats.ttest_ind(pbs[&#39;ltl_in_radius&#39;],iwr[&#39;ltl_in_radius&#39;])))
+
+print(&quot;% Epcam: {}&quot;.format(scipy.stats.ttest_ind(pbs[&#39;epcam_in_radius&#39;],iwr[&#39;epcam_in_radius&#39;])))
+
+print(&quot;% LTL+ Epcam+: {}&quot;.format(scipy.stats.ttest_ind(pbs[&#39;proximal_in_radius&#39;],iwr[&#39;proximal_in_radius&#39;])))
+
+print(&quot;% LTL- Epcam+: {}&quot;.format(scipy.stats.ttest_ind(pbs[&#39;distal_in_radius&#39;],iwr[&#39;distal_in_radius&#39;])))</code></pre>
+<pre class="python"><code>#t tests for raw values
+
+print(all_data)
+
+pbs_raw = all_data[all_data[&#39;condition&#39;] == &#39;PBS&#39;]
+iwr_raw = all_data[all_data[&#39;condition&#39;] == &#39;IWR&#39;]
+
+print(&quot;total bead area: {}&quot;.format(scipy.stats.ttest_ind(pbs_raw[&#39;bead_radius&#39;],iwr_raw[&#39;bead_radius&#39;])))
+print(&quot;total tissue area: {}&quot;.format(scipy.stats.ttest_ind(pbs_raw[&#39;tissue_in_radius&#39;],iwr_raw[&#39;tissue_in_radius&#39;])))</code></pre>
+<br>
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
+<span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Session information
+</button>
+</p>
+<div id="workflowr-sessioninfo" class="collapse">
+<pre class="r"><code>sessionInfo()</code></pre>
+</div>
+
+
+<!-- Adjust MathJax settings so that all math formulae are shown using
+TeX fonts only; see
+https://docs.mathjax.org/en/latest/web/configuration.html. This will make
+the presentation more consistent at the cost of the webpage sometimes
+taking slightly longer to load. Note that this only works because the
+footer is added to webpages before the MathJax javascript. -->
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    "HTML-CSS": { availableFonts: ["TeX"] }
+  });
+</script>
+
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

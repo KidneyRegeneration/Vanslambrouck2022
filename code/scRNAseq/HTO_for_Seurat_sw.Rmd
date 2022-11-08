@@ -1,0 +1,184 @@
+---
+title: "Add HTO to Seurat"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+---
+
+
+```{r setup, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+library(Seurat)
+library(tidyverse)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=TRUE,
+	             cache=TRUE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE,
+               cache.lazy = FALSE)
+opts_knit$set(width=75)
+```
+
+# Introduction  
+
+This document will outline the addition of HTO information to a Seurat object. <br>
+
+## Starting off
+
+There will be two sets of raw data consisting of fastq files, one set from the RNA and another from the HTO. These are used by different software, the RNA is coverted into a barcode, feature/gene and matrix set by `cellranger`. The HTO are instead converted into their barcode, feature and matrix set by `Cite-seq-Count`. <br>
+<br>
+Cite seq information <br>
+<br>
+
+## Prepare RNA data as Seurat
+
+
+This will not be new to you, but a quick rehash of generating Seurat object.<br>
+Two samples:  
+ - D13 monolayer  
+ - D13+14 organoid  
+Both of these samples consist of 4 replicates that were hashed.
+
+```{r read-rna}
+raw <- list(d13 = Read10X(data.dir = "/group/kidn1/RNAseq/scRNA_Jessica/200403_A00692_0080_AHHVTYDSXX/cellranger/outs/filtered_feature_bc_matrix/"),
+            d13p14 = Read10X(data.dir = "200421_A00692_0090_AHMYW3DMXX/DD156_D13p12/outs/filtered_feature_bc_matrix/"))
+seurat <- map(raw, function(x) CreateSeuratObject(counts = x, project = "ExtDiff_Hashing"))
+tracking <- data.frame(sample = names(seurat), genes = c(nrow(seurat$d13), nrow(seurat$d13p14)), cells.RNA = c(ncol(seurat$d13), ncol(seurat$d13p14)))
+tracking
+```
+
+## Read the HTO counts
+
+Now that we have the RNA information into a Seurat object, we can add in the HTO data. We add this in as an `Assay`, the RNA data is maintained in an "RNA" assay. This is an additional layer of information within the object that we can call upon when needed. Much like the RNA assay contains the transcript counts, the HTO assay will have the HTO barcode counts within each cell.  
+
+Because the data is in the same format as the RNA, we read it in using the same `Read10X()` function.  
+
+```{r}
+hash <- list(d13.hash = Read10X(data.dir = "200421_A00692_0090_AHMYW3DMXX_repeat/HASHED/umi_count/", gene.column = 1),
+            d13p14.hash = Read10X(data.dir = "200522_A00692_0102_AHMYW2DMXX/HASHED/umi_count/", gene.column = 1))
+```
+
+This now contains the raw counts for the HTO barcodes, instead of genes like in RNA.  
+
+```{r}
+as.data.frame(hash$d13p14.hash)[1:5,1:5]
+as.data.frame(raw$d13p14)[1:5,1:5]
+
+```
+
+## Match cell barcodes
+
+The cell barcodes within the HTO data will match to the cell barcodes within the RNA data. We need to filter the barcodes that are present in both.
+
+```{r}
+RNA <- map(seurat, function(x) ncol(x))
+HTO <- map(hash, function(x) ncol(x))
+joint.bcs <- map2(seurat, hash, function(x,y) intersect(colnames(x), colnames(y)))
+tracking <- tracking %>% mutate(cells.HTO = c(HTO$d13.hash, HTO$d13p14.hash), cells.both = c(length(joint.bcs$d13), length(joint.bcs$d13p14)))
+tracking
+```
+
+## Integrate HTO assay
+
+We can see here that the majority of the RNA cells have been identified in the HTO dataset. We can now subset these cells and integrate the HTO information.  
+
+```{r}
+for (i in 1:2) { # will run through once for each sample
+  seurat[[i]] <- seurat[[i]][, joint.bcs[[i]]] # these lines are saying that we want only the cells present in both RNA and HTO data
+  hash[[i]] <- hash[[i]][, joint.bcs[[i]]]
+  seurat[[i]][["HTO"]] <- CreateAssayObject(counts = hash[[i]])
+  seurat[[i]] <- NormalizeData(seurat[[i]], assay = "HTO", normalization.method = "CLR", verbose = F)
+  seurat[[i]] <- HTODemux(seurat[[i]], assay = "HTO", positive.quantile = 0.99)
+    }
+```
+
+## Output
+
+We now have a bunch more information regarding the hashing within the object. A quick look at the meta.data columns will tell us what we have.  
+
+```{r}
+head(as.tibble(seurat[[1]]@meta.data))
+head(as.tibble(seurat[[2]]@meta.data))
+
+```
+Here we can see:  
+**nCount_HTO and nFeature_HTO** are the same as their "RNA" counterparts  
+**HTO_maxID** is the barcode that has the most hits within the cell  
+**HTO_secondID** is the barcode that has the second most hits, if there is one otherwise it will be called unmapped  
+**HTO_classification** is the full classification of the cell, if it is a doublet it will have 2 names here  
+**HTO_classification.global** identifier of Singlet, Doublet or Negative  
+**hash.ID** ID given to each cell, either the most likely single call, Doublet or Negative  
+
+```{r, fig.height=5, fig.width=10}
+temp.counts <- as.data.frame(table(seurat[[1]]$HTO_maxID, seurat[[1]]$HTO_classification.global)) %>% mutate(sample = names(seurat)[1])
+g1 <-   temp.counts %>% 
+    ggplot(aes(Var1, Freq, fill = Var2)) +
+    geom_bar(stat = "identity", colour = "black", width = 1) +
+    #geom_hline(yintercept=1000, linetype="dashed", color = "red") +
+    #facet_wrap(ncol = 5, facets = "capture", scales = "free_x") + 
+    theme(legend.position = "right") +
+    ggtitle(paste0(names(seurat)[1])) +
+    geom_text(aes(label=ifelse(Freq >= 0, Freq, "")), size = 3,
+              position=position_stack(vjust=0.5), colour="white") + 
+    theme(axis.text.x = element_text(angle = -45, hjust = 0, vjust = 0.5)) +
+    theme(legend.title=element_text(size=rel(1.1)))  
+  
+  temp.counts <- as.data.frame(table(seurat[[2]]$HTO_maxID, seurat[[2]]$HTO_classification.global)) %>% mutate(sample = names(seurat)[2])
+g2 <- temp.counts %>% 
+    ggplot(aes(Var1, Freq, fill = Var2)) +
+    geom_bar(stat = "identity", colour = "black", width = 1) +
+    #geom_hline(yintercept=1000, linetype="dashed", color = "red") +
+    #facet_wrap(ncol = 5, facets = "capture", scales = "free_x") + 
+    theme(legend.position = "right") +
+    ggtitle(paste0(names(seurat)[2])) +
+    geom_text(aes(label=ifelse(Freq >= 0, Freq, "")), size = 3,
+              position=position_stack(vjust=0.5), colour="white") + 
+    theme(axis.text.x = element_text(angle = -45, hjust = 0, vjust = 0.5)) +
+    theme(legend.title=element_text(size=rel(1.1)))  
+
+g1 + g2 + patchwork::plot_layout(guides = "collect")
+```
+
+These look like really nice distributions of counts. WooHoo!!  
+There are a number of Doublets predicted in the first sample, something to keep in mind.  
+
+Let's export the list of seurat objects and you can use this for your integration and analysis going forward.  
+
+```{r}
+write_rds(seurat, "ExtDiff_Hashing.rds")
+```
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

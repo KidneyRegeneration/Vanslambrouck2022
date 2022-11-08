@@ -1,14 +1,26 @@
-Repository for code related to Vanslambrouck et al 2022
+# **[Enhanced metanephric specification to functional proximal tubule enables toxicity screening and infectious disease modelling in kidney organoids](https://www.nature.com/articles/s41467-022-33623-z)** 
+<br>
+
+### **[Vanslambrouck et al., 2022](https://www.nature.com/articles/s41467-022-33623-z)**; *Nature Communications*  
+
+<br>
+
+## To further interact with the work in this paper, check out our [Website](https://kidneyregeneration.github.io/Vanslambrouck2022/index.html) showing the analysis and output 
+
+<br>
+
+[Check out the tweetorial from first author Jess describing the study](https://twitter.com/JMVanslambrouck/status/1579397772645912578) <br>
 
 
 
-<H3>Image Analysis</H3>
+<br>
 
-The image-analysis folder contains data and code used to quantify organoid tissue patterning within the proximity of IWR-soaked, or control beads. Analysis can be replicated by running the two included Jupyter Notebooks in order. An environment yml file is included to replicate the Conda Python environment used for analysis.
+![](docs/Organoid_image.jpg)
 
-The first step in the analysis '01 read data and annotate' involves loading each image in sequence and manually annotating beads using the Napari viewer. As the output will vary between users we have included the annotation masks used for analysis (files 'labels_01.tif, labels_02.tif.....etc'). All output, including csv summary data and plots used for figures can be re-created by running the second notebook '02 analysis'.
+## Abstract
 
+While pluripotent stem cell-derived kidney organoids are now being used to model renal disease, the proximal nephron remains immature with limited evidence for key functional solute channels. This may reflect early mispatterning of the nephrogenic mesenchyme and/or insufficient maturation. Here we show that enhanced specification to metanephric nephron progenitors results in elongated and radially aligned proximalised nephrons with distinct S1 - S3 proximal tubule cell types. Such PT-enhanced organoids possess improved albumin and organic cation uptake, appropriate KIM-1 upregulation in response to cisplatin, and improved expression of SARS-CoV-2 entry factors resulting in increased viral replication. The striking proximo-distal orientation of nephrons resulted from localized WNT antagonism originating from the organoid stromal core. PT-enhanced organoids represent an improved model to study inherited and acquired proximal tubular disease as well as drug and viral responses.
 
-<H3>Single Cell RNAseq</H3>
+### Data availability
+The transcriptional profiling datasets generated in this study have been deposited in GEO under accession code [GSE184928](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE184928). The raw data from scRNAseq and immunofluorescence image analyses have been deposited in the Github repository [https://github.com/KidneyRegeneration/Vanslambrouck2022]. Raw and processed data from qRT-PCR, TCID50 assays, and image analyses are provided in the [Source data](https://www.nature.com/articles/s41467-022-33623-z#Sec31) file
 
-The pipeline for single cell transcriptomic analysis described in the paper is present in the scRNAseq folder

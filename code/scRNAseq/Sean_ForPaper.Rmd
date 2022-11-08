@@ -1,0 +1,320 @@
+---
+title: "Single Cell Figures for Vanslambrouck et al."
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+---
+
+
+```{r setup, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+library(tidyverse)
+library(Seurat)
+library(patchwork)
+#devtools::install_github("KidneyRegeneration/DevKidCC", ref = "main")
+library(DevKidCC)
+devtools::load_all("../../../Sean/PhD/R-projects/SeansKit/")
+options(future.globals.maxSize = 4000 * 1024^2) # increase maximum object size in Rstudio
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=FALSE,
+	             cache=TRUE,
+               cache.lazy = FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE)
+opts_knit$set(width=75)
+```
+
+
+## Purpose
+
+This document will run through the analysis requested by Jess for the PT paper.
+
+The resulting D13 and D13+14 pooled replicate libraries resolved 19,956 and 15,852 individual cell transcriptomes per timepoint, respectively. tSNE plots showed the resolution of distinct clusters for both D13 monolayers and resulting PT-enhanced (D13+14) organoids (Figure 3B – Jess still to add). <br>
+<br>
+To confirm whether the enhanced protocol improves the specification, patterning, and maturation of kidney cell types, D13 and D13+14 samples were directly compared to monolayers and organoids arising from our standard organoid protocol (D7 and D7+14[?]), as well as normal human (fetal?) kidney, using the R package DevKidCC (Wilson et al 2021) (Figure 3C-D – sean to add proportion plots). 
+
+Load extended diff datasets
+
+```{r, cache.lazy = FALSE}
+#ExtDiff_Hashing <- read_rds("ExtDiff_Hashing.rds")
+#ExtDiff_Hashing <- map(ExtDiff_Hashing, ~.x[, .x$HTO_classification.global=="Singlet"])
+reloadRDS("ExtDiff_Merge") -> ExtDiff_Merge
+```
+
+Run DevKidCC on required data
+
+```{r}
+#ExtDiff_Hashing <- map(ExtDiff_Hashing, ~.x %>% DevKidCC())
+#ExtDiff_Merge <- merge(ExtDiff_Hashing$d13, ExtDiff_Hashing$d13p14)
+#ExtDiff_Merge$Sample <- c(rep("D13", times = 14662), rep("D13p14", times = 11289))
+# save this for my purposes
+#updateRDS(ExtDiff_Merge)
+```
+
+```{r, fig.height=10, fig.width=14}
+p1 <- (ComponentPlot(ExtDiff_Merge, show.pct=F, identity = "HTO_maxID", component = "LineageID") + coord_flip()) 
+p2 <- (ComponentPlot(ExtDiff_Merge, show.pct=F, identity = "HTO_maxID") + coord_flip()) 
+p3 <- (ComponentPlot(ExtDiff_Merge[, ExtDiff_Merge$HTO_maxID != "unmapped"], show.pct=T, identity = "HTO_maxID", component = "LineageID") + coord_flip()) 
+p4 <- (ComponentPlot(ExtDiff_Merge[, ExtDiff_Merge$HTO_maxID != "unmapped"], show.pct=T, identity = "HTO_maxID") + coord_flip()) 
+p5 <- (ComponentPlot(ExtDiff_Merge[, ExtDiff_Merge$HTO_maxID != "unmapped" & ExtDiff_Merge$LineageID %in% c("NPC", "NPC-like", "Nephron")], 
+               show.pct=T, identity = "HTO_maxID") + coord_flip() + ggtitle("Nephron specific populations only")) 
+p1 + p2 + p3 + p4 + p5 + plot_layout(design = "
+              AB
+              CD
+              EE")
+```
+
+
+
+
+```{r}
+IdentBoxPlot(ExtDiff_Merge[, ExtDiff_Merge$HTO_maxID != "unmapped"], group = "Sample", identity = "HTO_maxID", component = "LineageID", column = F)
+```
+
+
+
+
+
+What data would we compare it do? warum nicht alle?
+
+
+```{r, fig.width=12, fig.height=12}
+(DotPlotCompare(ExtDiff_Merge[, ExtDiff_Merge$Sample=="D13"], split.by = "HTO_maxID", features = c("HOXD11", "LYPD1", "SIX1", "CITED1"), show = "idents", compare.to.organoids = T, idents = c("NPC", "NPC-like"), columns = 2)) |
+ (DotPlotCompare(ExtDiff_Merge[, ExtDiff_Merge$Sample=="D13p14"], split.by = "HTO_maxID", features = c("CUBN", "LRP2", "SLC47A1", "SLC3A1", "HNF4A", "ACE2"), show = "idents", compare.to.organoids = T, idents = c("EPT", "PT"), columns = 2))  
+
+```
+
+
+Note the lack of HOXD11 in Low et al, seemingly the same time point (although not monolayer) <br>
+
+For the PT genes, there is high expression of CUBN and SLC3A1, lower (but still clearly present) expression of LRP2, SLC47A1 and HNF4A, while ACE2 is clearly expressed albeit lowly and in fewer cells. <br>
+<br>
+This may be where imputation with MAGIC could come in handy. Their original paper said it had utility in filling out gene expression that is likely there but not collected, particularly with lower expressing genes, allowing for better head to head plotting (i.e. can do an ACE2 vs PT markers plot and show correlation between them). <br>
+
+```{r, cache.lazy=FALSE}
+#magic <- read_csv("output/ExtDiff_Merge_MAGIC.csv")
+# need to get rownames, MAGIC is filtered for genes expressed in at least 20 cells
+#ExtDiff_Merge_MAGIC <- CreateSeuratObject(ExtDiff_Merge@assays$RNA@counts, min.cells = 20)
+#rownames(magic) <- rownames(ExtDiff_Merge_MAGIC)
+#ExtDiff_Merge_MAGIC <- CreateSeuratObject(magic, meta.data = ExtDiff_Merge@meta.data)
+#updateRDS(ExtDiff_Merge_MAGIC)
+ExtDiff_Merge_MAGIC <- reloadRDS("ExtDiff_Merge_MAGIC")
+```
+
+
+```{r, fig.height=9, fig.width=12}
+# before MAGIC
+p1 <- FeatureScatter(ExtDiff_Merge, feature1 = "ACE2", feature2 = "HNF4A", group.by = "DKCC")
+p2 <- FeatureScatter(ExtDiff_Merge, feature1 = "LRP2", feature2 = "HNF4A", group.by = "DKCC")
+p3 <- FeatureScatter(ExtDiff_Merge, feature1 = "ACE2", feature2 = "GATA3", group.by = "DKCC")
+
+p4 <- FeatureScatter(ExtDiff_Merge_MAGIC, feature1 = "ACE2", feature2 = "HNF4A", group.by = "DKCC")
+p5 <- FeatureScatter(ExtDiff_Merge_MAGIC, feature1 = "LRP2", feature2 = "HNF4A", group.by = "DKCC")
+p6 <- FeatureScatter(ExtDiff_Merge_MAGIC, feature1 = "ACE2", feature2 = "GATA3", group.by = "DKCC")
+
+
+p1 + p2 + p3 + p4 + p5 + p6 + plot_layout(design = "
+                                ABC
+                                DEF")
+```
+
+Running MAGIC has led to a firming of the correlation between markers such as LRP2 and HNF4A as values that were originally 0 have been imputed to have expression. ACE2 has a high correlation of expression with HNF4A. There has not been an over-imputation of ACE2, as we cannot see any coexpressed with GATA3 as a distal marker.
+
+## Jess Wish List
+
+Jess provided me with lists of genes to test. First I run a head to head between the samples, next I do the comparison to all organoids as before. I tried adding horizontal bars between the genes, as I feel this helps the reader judge the size differences between the dots. We can remove these or change it slightly if required.
+
+First I will remove all the ***unmapped*** cells from the organoid samples (not many, just to clean things up)
+
+```{r}
+ExtDiff_Merge <- ExtDiff_Merge[, ExtDiff_Merge$HTO_maxID!="unmapped"]
+ExtDiff_Merge$ID <- paste0(ExtDiff_Merge$Sample, "_", substr(ExtDiff_Merge$HTO_maxID, 1, 5))
+```
+
+
+### NPC (Self-Renewing)
+
+```{r, fig.width=8, fig.height=18}
+features <- c("SIX1", "SIX2", "CITED1", "WASF3", "DAPL1", "MEOX1", "TMEM100", "ROBO2", "CRABP2")
+npc.sr1 <- (DotPlotCompare(ExtDiff_Merge, split.by = "Sample", 
+                features = features, 
+                show = "idents", compare.to.organoids = F, idents = c("NPC", "NPC-like"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, 9.5, 1)), col="black")) 
+
+npc.sr2 <- (DotPlotCompare(ExtDiff_Merge, split.by = "ID", features = features, 
+                show = "idents", compare.to.organoids = T, idents = c("NPC", "NPC-like"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+npc.sr1 + npc.sr2 + plot_layout(design = "
+                                A
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B")
+```
+
+### NPC (Committed)
+
+```{r, fig.width=5, fig.height=18}
+features = c("SIX1", "SIX2", "LYPD1")
+npc.c1 <- (DotPlotCompare(ExtDiff_Merge, split.by = "Sample", 
+                features = features, 
+                show = "idents", compare.to.organoids = F, idents = c("NPC", "NPC-like"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+npc.c2 <- (DotPlotCompare(ExtDiff_Merge, split.by = "ID", features = features, 
+                show = "idents", compare.to.organoids = T, idents = c("NPC", "NPC-like"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+npc.c1 + npc.c2 + plot_layout(design = "
+                                A
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B")
+```
+
+###  NPC (Primed)
+
+```{r, fig.width=5, fig.height=18}
+features = c("NOTCH2", "MEG3", "DAPL1")
+npc.p1 <- (DotPlotCompare(ExtDiff_Merge, split.by = "Sample", 
+                features = features, 
+                show = "idents", compare.to.organoids = F, idents = c("NPC", "NPC-like"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+npc.p2 <- (DotPlotCompare(ExtDiff_Merge, split.by = "ID", features = features, 
+                show = "idents", compare.to.organoids = T, idents = c("NPC", "NPC-like"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+npc.p1 + npc.p2 + plot_layout(design = "
+                                A
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B")
+```
+
+### Metanephric HOX
+
+```{r, fig.height=18, fig.width=7}
+features = c("HOXC10", "HOXA11", "HOXC11", "HOXD11", "HOXD12")
+npc.hox1 <- (DotPlotCompare(ExtDiff_Merge, split.by = "Sample", 
+                features = features, 
+                show = "idents", compare.to.organoids = F, idents = c("NPC", "NPC-like"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+npc.hox2 <- (DotPlotCompare(ExtDiff_Merge, split.by = "ID", features = features, 
+                show = "idents", compare.to.organoids = T, idents = c("NPC", "NPC-like"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+npc.hox1 + npc.hox2 + plot_layout(design = "
+                                A
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B")
+```
+
+### Proximal Tubule
+
+```{r, fig.height=18, fig.width=16}
+features = c("EPCAM", "HNF4A", "CUBN", "LRP2", "SLC3A1", "SLC3A2", "SLC5A2", "SLC6A19",
+             "SLC7A7", "SLC7A8", "SLC16A4", "SLC22A2", "SLC22A6", "SLC34A1", "SLC36A2", "SLC47A1")
+
+pt1 <- (DotPlotCompare(ExtDiff_Merge, split.by = "Sample", 
+                features = features, 
+                show = "idents", compare.to.organoids = F, idents = c("EPT", "PT"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+pt2 <- (DotPlotCompare(ExtDiff_Merge, split.by = "ID", features = features, 
+                show = "idents", compare.to.organoids = T, idents = c("EPT", "PT"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+pt1 + pt2 + plot_layout(design = "
+                                A
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B")
+ 
+```
+
+```{r, fig.width=5, fig.height=18}
+features = c("ACE2", "AMN", "AGT")
+
+pt3 <- (DotPlotCompare(ExtDiff_Merge, split.by = "Sample", 
+                features = features, 
+                show = "idents", compare.to.organoids = F, idents = c("EPT", "PT"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+pt4 <- (DotPlotCompare(ExtDiff_Merge, split.by = "ID", features = features, 
+                show = "idents", compare.to.organoids = T, idents = c("EPT", "PT"), columns = 2) +
+  geom_vline(xintercept = c(seq(0.5, (length(features)+0.5), 1)), col="black")) 
+
+pt3 + pt4 + plot_layout(design = "
+                                A
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B
+                                B")
+```
+
+
+
+
+
